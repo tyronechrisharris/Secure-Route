@@ -26,6 +26,17 @@ An offline-first, high-security transport routing application using Spring Boot 
 *   `POST /api/secure-route`: Calculate route.
 *   `GET /api/security-assets`: Get all security assets.
 
+## Releases (Windows & Mac)
+
+A universal release package is available.
+
+1.  Download `security-routing-release.zip`.
+2.  Extract the contents.
+3.  **Windows:** Double-click `run-windows.bat`.
+4.  **Mac/Linux:** Open a terminal, navigate to the folder, and run `./run-mac.sh`.
+
+*Note: Java 17+ must be installed on your system.*
+
 ## Troubleshooting
 
 If routing fails, ensure the OSM file covers the requested coordinates.

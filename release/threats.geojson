@@ -1,0 +1,24 @@
+{
+    "type": "FeatureCollection",
+    "features": [
+        {
+            "type": "Feature",
+            "properties": {
+                "name": "High Risk Zone 1",
+                "severity": "HIGH"
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        [-0.125, 51.505],
+                        [-0.120, 51.505],
+                        [-0.120, 51.510],
+                        [-0.125, 51.510],
+                        [-0.125, 51.505]
+                    ]
+                ]
+            }
+        }
+    ]
+}
