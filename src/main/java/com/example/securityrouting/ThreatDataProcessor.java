@@ -26,10 +26,24 @@ public class ThreatDataProcessor {
         loadThreats("threats.geojson");
     }
 
-    private void loadThreats(String filepath) {
+    public synchronized void saveThreats(String geoJsonPayload) {
+        try {
+            File file = new File("threats.geojson");
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(file, objectMapper.readTree(geoJsonPayload));
+            loadThreats("threats.geojson");
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("Failed to save threats", e);
+        }
+    }
+
+    private synchronized void loadThreats(String filepath) {
         try {
             File file = new File(filepath);
             if (!file.exists()) return;
+
+            threatPolygons.clear();
+            threatFeatures.clear();
 
             JsonNode root = objectMapper.readTree(file);
             JsonNode features = root.get("features");
@@ -74,5 +88,9 @@ public class ThreatDataProcessor {
 
     public List<Map<String, Object>> getThreatFeatures() {
         return threatFeatures;
+    }
+
+    public List<Geometry> getThreatPolygons() {
+        return threatPolygons;
     }
 }

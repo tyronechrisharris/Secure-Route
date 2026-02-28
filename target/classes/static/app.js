@@ -10,8 +10,22 @@ var layers = {
     'EMS': L.layerGroup().addTo(map),
     'MILITARY': L.layerGroup().addTo(map),
     'SAFE_HAVEN': L.layerGroup().addTo(map),
-    'ROUTE': L.layerGroup().addTo(map)
+    'ROUTE': L.layerGroup().addTo(map),
+    'THREATS': L.layerGroup().addTo(map)
 };
+
+map.pm.addControls({
+    position: 'topleft',
+    drawMarker: true,
+    drawPolygon: true,
+    editMode: true,
+    drawPolyline: false,
+    drawRectangle: false,
+    drawCircle: false,
+    drawCircleMarker: false,
+    drawText: false,
+    removalMode: true,
+});
 
 var icons = {
     'POLICE': L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png', iconSize: [25, 41], iconAnchor: [12, 41]}),
@@ -19,6 +33,22 @@ var icons = {
     'MILITARY': L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-black.png', iconSize: [25, 41], iconAnchor: [12, 41]}),
     'SAFE_HAVEN': L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png', iconSize: [25, 41], iconAnchor: [12, 41]})
 };
+
+// Load threats
+fetch('/api/threats')
+    .then(response => response.json())
+    .then(data => {
+        L.geoJSON(data, {
+            pmIgnore: false,
+            style: { color: 'red', fillColor: '#f03', fillOpacity: 0.5 },
+            onEachFeature: function(feature, layer) {
+                if (feature.properties && feature.properties.name) {
+                    layer.bindPopup("<b>Threat:</b> " + feature.properties.name);
+                }
+            }
+        }).addTo(layers['THREATS']);
+    })
+    .catch(err => console.error("Failed to load threats:", err));
 
 // Load assets
 fetch('/api/security-assets')
@@ -40,6 +70,85 @@ function toggleLayer(type) {
     } else {
         map.addLayer(layers[type]);
     }
+}
+
+// Global markers for start and end
+let startMarker = L.marker([document.getElementById('startLat').value || 51.5074, document.getElementById('startLon').value || -0.1278], {
+    draggable: true,
+    icon: L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png', iconSize: [25, 41], iconAnchor: [12, 41]})
+}).addTo(map);
+
+let endMarker = L.marker([document.getElementById('endLat').value || 51.5150, document.getElementById('endLon').value || -0.1100], {
+    draggable: true,
+    icon: L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png', iconSize: [25, 41], iconAnchor: [12, 41]})
+}).addTo(map);
+
+// Sync marker dragging to input fields
+startMarker.on('dragend', function(e) {
+    var latlng = e.target.getLatLng();
+    document.getElementById('startLat').value = latlng.lat.toFixed(6);
+    document.getElementById('startLon').value = latlng.lng.toFixed(6);
+});
+
+endMarker.on('dragend', function(e) {
+    var latlng = e.target.getLatLng();
+    document.getElementById('endLat').value = latlng.lat.toFixed(6);
+    document.getElementById('endLon').value = latlng.lng.toFixed(6);
+});
+
+// Map click event to set points
+var popup = L.popup();
+
+map.on('click', function(e) {
+    const lat = e.latlng.lat.toFixed(6);
+    const lng = e.latlng.lng.toFixed(6);
+
+    const content = `
+        <div style="text-align: center;">
+            <p style="margin: 0 0 10px 0;"><strong>Set Location</strong></p>
+            <button onclick="setPoint('start', ${lat}, ${lng})" style="margin-bottom: 5px; width: 100%; cursor: pointer;">Set Start Point</button><br>
+            <button onclick="setPoint('end', ${lat}, ${lng})" style="width: 100%; cursor: pointer;">Set End Point</button>
+        </div>
+    `;
+
+    popup
+        .setLatLng(e.latlng)
+        .setContent(content)
+        .openOn(map);
+});
+
+// Expose setPoint globally so popup buttons can call it
+window.setPoint = function(type, lat, lng) {
+    if (type === 'start') {
+        document.getElementById('startLat').value = lat;
+        document.getElementById('startLon').value = lng;
+        startMarker.setLatLng([lat, lng]);
+    } else if (type === 'end') {
+        document.getElementById('endLat').value = lat;
+        document.getElementById('endLon').value = lng;
+        endMarker.setLatLng([lat, lng]);
+    }
+    map.closePopup();
+};
+
+function saveThreats() {
+    // Extract Geoman layers
+    let featureGroup = L.featureGroup(map.pm.getGeomanLayers());
+    let geojson = featureGroup.toGeoJSON();
+
+    fetch('/api/threats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(geojson)
+    })
+    .then(response => {
+        if (!response.ok) throw new Error("Failed to save threats");
+        alert("Threats saved successfully!");
+    })
+    .catch(error => {
+        alert("Error saving threats: " + error);
+        console.error(error);
+    });
 }
 
 function calculateRoute() {
@@ -84,6 +193,19 @@ function calculateRoute() {
         document.getElementById('valChoke').innerText = data.chokePointsAvoided; // Mocked for now
         document.getElementById('valProximity').innerText = (data.proximityScore / 1000).toFixed(2) + " km";
         document.getElementById('valSafeHaven').innerText = data.etaToNearestSafeHaven;
+
+        let threatsEl = document.getElementById('valThreats');
+        if (data.intersectedThreats && data.intersectedThreats.length > 0) {
+            threatsEl.innerText = data.intersectedThreats.join(', ');
+            threatsEl.style.color = 'red';
+            threatsEl.style.backgroundColor = 'rgba(255,0,0,0.2)';
+            threatsEl.style.padding = '2px 5px';
+            threatsEl.style.borderRadius = '3px';
+        } else {
+            threatsEl.innerText = "Clear";
+            threatsEl.style.color = '#2ecc71';
+            threatsEl.style.backgroundColor = 'transparent';
+        }
     })
     .catch(error => {
         alert("Error calculating route: " + error);
