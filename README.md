@@ -18,7 +18,7 @@ An offline-first, high-security transport routing application using Spring Boot 
 
 ## Configuration
 
-*   **OSM Data:** Place `map-data.osm` in the root directory.
+*   **OSM Data:** Please rename your OSM compliant map data file to either `map-data.osm.bz2` (for compressed files) or `map-data.osm` (for uncompressed files) and place it in the root directory.
 *   **Threat Data:** Place `threats.geojson` in the root directory.
 
 ## API Endpoints

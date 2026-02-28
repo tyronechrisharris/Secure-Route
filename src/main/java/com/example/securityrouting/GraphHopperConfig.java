@@ -16,8 +16,8 @@ public class GraphHopperConfig {
     public GraphHopper graphHopper() {
         GraphHopper hopper = new GraphHopper();
 
-        if (new File("planet-260216.osm.bz2").exists()) {
-            hopper.setOSMFile("planet-260216.osm.bz2");
+        if (new File("map-data.osm.bz2").exists()) {
+            hopper.setOSMFile("map-data.osm.bz2");
         } else {
             hopper.setOSMFile("map-data.osm");
         }
