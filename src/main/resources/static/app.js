@@ -42,6 +42,65 @@ function toggleLayer(type) {
     }
 }
 
+// Global markers for start and end
+let startMarker = L.marker([document.getElementById('startLat').value || 51.5074, document.getElementById('startLon').value || -0.1278], {
+    draggable: true,
+    icon: L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png', iconSize: [25, 41], iconAnchor: [12, 41]})
+}).addTo(map);
+
+let endMarker = L.marker([document.getElementById('endLat').value || 51.5150, document.getElementById('endLon').value || -0.1100], {
+    draggable: true,
+    icon: L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png', iconSize: [25, 41], iconAnchor: [12, 41]})
+}).addTo(map);
+
+// Sync marker dragging to input fields
+startMarker.on('dragend', function(e) {
+    var latlng = e.target.getLatLng();
+    document.getElementById('startLat').value = latlng.lat.toFixed(6);
+    document.getElementById('startLon').value = latlng.lng.toFixed(6);
+});
+
+endMarker.on('dragend', function(e) {
+    var latlng = e.target.getLatLng();
+    document.getElementById('endLat').value = latlng.lat.toFixed(6);
+    document.getElementById('endLon').value = latlng.lng.toFixed(6);
+});
+
+// Map click event to set points
+var popup = L.popup();
+
+map.on('click', function(e) {
+    const lat = e.latlng.lat.toFixed(6);
+    const lng = e.latlng.lng.toFixed(6);
+
+    const content = `
+        <div style="text-align: center;">
+            <p style="margin: 0 0 10px 0;"><strong>Set Location</strong></p>
+            <button onclick="setPoint('start', ${lat}, ${lng})" style="margin-bottom: 5px; width: 100%; cursor: pointer;">Set Start Point</button><br>
+            <button onclick="setPoint('end', ${lat}, ${lng})" style="width: 100%; cursor: pointer;">Set End Point</button>
+        </div>
+    `;
+
+    popup
+        .setLatLng(e.latlng)
+        .setContent(content)
+        .openOn(map);
+});
+
+// Expose setPoint globally so popup buttons can call it
+window.setPoint = function(type, lat, lng) {
+    if (type === 'start') {
+        document.getElementById('startLat').value = lat;
+        document.getElementById('startLon').value = lng;
+        startMarker.setLatLng([lat, lng]);
+    } else if (type === 'end') {
+        document.getElementById('endLat').value = lat;
+        document.getElementById('endLon').value = lng;
+        endMarker.setLatLng([lat, lng]);
+    }
+    map.closePopup();
+};
+
 function calculateRoute() {
     var startLat = parseFloat(document.getElementById('startLat').value);
     var startLon = parseFloat(document.getElementById('startLon').value);

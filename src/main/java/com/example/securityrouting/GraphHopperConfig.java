@@ -15,7 +15,13 @@ public class GraphHopperConfig {
     @Bean
     public GraphHopper graphHopper() {
         GraphHopper hopper = new GraphHopper();
-        hopper.setOSMFile("map-data.osm");
+
+        if (new File("map-data.osm.bz2").exists()) {
+            hopper.setOSMFile("map-data.osm.bz2");
+        } else {
+            hopper.setOSMFile("map-data.osm");
+        }
+
         hopper.setGraphHopperLocation("graph-cache");
 
         // Custom Model setup
