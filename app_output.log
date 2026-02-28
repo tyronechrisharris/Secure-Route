@@ -1,0 +1,226 @@
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::                (v3.2.0)
+
+2026-02-28T02:20:01.064Z  INFO 2089 --- [           main] c.e.s.SecurityRoutingApplication         : Starting SecurityRoutingApplication v0.0.1-SNAPSHOT using Java 21.0.9 with PID 2089 (/app/target/security-routing-0.0.1-SNAPSHOT.jar started by jules in /app)
+2026-02-28T02:20:01.069Z  INFO 2089 --- [           main] c.e.s.SecurityRoutingApplication         : No active profile set, falling back to 1 default profile: "default"
+2026-02-28T02:20:02.430Z  INFO 2089 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port 8080 (http)
+2026-02-28T02:20:02.453Z  INFO 2089 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2026-02-28T02:20:02.453Z  INFO 2089 --- [           main] o.apache.catalina.core.StandardEngine    : Starting Servlet engine: [Apache Tomcat/10.1.16]
+2026-02-28T02:20:02.513Z  INFO 2089 --- [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2026-02-28T02:20:02.515Z  INFO 2089 --- [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 1326 ms
+2026-02-28T02:20:03.184Z  INFO 2089 --- [           main] c.g.routing.lm.LMPreparationHandler      : Creating LM preparations, totalMB:54, usedMB:27
+2026-02-28T02:20:03.191Z  INFO 2089 --- [           main] c.g.routing.lm.LMPreparationHandler      : Finished LM preparation, totalMB:54, usedMB:27
+2026-02-28T02:20:03.218Z  INFO 2089 --- [           main] c.g.routing.ch.CHPreparationHandler      : There are no CHs to prepare
+2026-02-28T02:20:03.224Z  INFO 2089 --- [           main] com.graphhopper.GraphHopper              : version 9.0|2024-04-22T10:56:13Z (9,22,6,5,2,9)
+2026-02-28T02:20:03.245Z  INFO 2089 --- [           main] com.graphhopper.GraphHopper              : graph car|RAM_STORE|2D|no_turn_cost|nodes:9,edges:22,geometry:6,location_index:5,string_index:2,nodesCH:0,shortcuts:9, details:edges: 4(1MB), nodes: 4(1MB), bounds: -0.14,-0.1,51.5,51.52, name:(1MB), geo:10(1MB)
+2026-02-28T02:20:03.370Z  INFO 2089 --- [           main] o.s.b.a.w.s.WelcomePageHandlerMapping    : Adding welcome page: class path resource [static/index.html]
+2026-02-28T02:20:03.690Z  INFO 2089 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port 8080 (http) with context path ''
+Updated live traffic: 4 incidents.
+2026-02-28T02:20:03.739Z  INFO 2089 --- [           main] c.e.s.SecurityRoutingApplication         : Started SecurityRoutingApplication in 3.253 seconds (process running for 3.905)
+Updated live traffic: 2 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 2 incidents.
+2026-02-28T02:24:18.916Z  INFO 2089 --- [nio-8080-exec-1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2026-02-28T02:24:18.916Z  INFO 2089 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2026-02-28T02:24:18.918Z  INFO 2089 --- [nio-8080-exec-1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 1 ms
+Updated live traffic: 4 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 1 incidents.
+Updated live traffic: 2 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 0 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 4 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 3 incidents.
+Updated live traffic: 1 incidents.

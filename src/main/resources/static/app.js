@@ -20,6 +20,79 @@ var icons = {
     'SAFE_HAVEN': L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png', iconSize: [25, 41], iconAnchor: [12, 41]})
 };
 
+var startLatInput = document.getElementById('startLat');
+var startLonInput = document.getElementById('startLon');
+var endLatInput = document.getElementById('endLat');
+var endLonInput = document.getElementById('endLon');
+
+var startMarker = L.marker([parseFloat(startLatInput.value), parseFloat(startLonInput.value)], {
+    draggable: true,
+    icon: L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png', iconSize: [25, 41], iconAnchor: [12, 41]})
+}).addTo(map);
+
+var endMarker = L.marker([parseFloat(endLatInput.value), parseFloat(endLonInput.value)], {
+    draggable: true,
+    icon: L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png', iconSize: [25, 41], iconAnchor: [12, 41]})
+}).addTo(map);
+
+startMarker.on('dragend', function(e) {
+    var pos = e.target.getLatLng();
+    startLatInput.value = pos.lat.toFixed(4);
+    startLonInput.value = pos.lng.toFixed(4);
+});
+
+endMarker.on('dragend', function(e) {
+    var pos = e.target.getLatLng();
+    endLatInput.value = pos.lat.toFixed(4);
+    endLonInput.value = pos.lng.toFixed(4);
+});
+
+function updateMarkersFromInputs() {
+    var startLat = parseFloat(startLatInput.value);
+    var startLon = parseFloat(startLonInput.value);
+    var endLat = parseFloat(endLatInput.value);
+    var endLon = parseFloat(endLonInput.value);
+    if (!isNaN(startLat) && !isNaN(startLon)) startMarker.setLatLng([startLat, startLon]);
+    if (!isNaN(endLat) && !isNaN(endLon)) endMarker.setLatLng([endLat, endLon]);
+}
+
+startLatInput.addEventListener('change', updateMarkersFromInputs);
+startLonInput.addEventListener('change', updateMarkersFromInputs);
+endLatInput.addEventListener('change', updateMarkersFromInputs);
+endLonInput.addEventListener('change', updateMarkersFromInputs);
+
+var mapPopup = L.popup();
+
+map.on('click', function(e) {
+    var lat = e.latlng.lat.toFixed(4);
+    var lng = e.latlng.lng.toFixed(4);
+
+    var content = document.createElement('div');
+    content.innerHTML = `
+        <div style="text-align: center; margin-bottom: 5px;"><b>Set Location</b></div>
+        <button onclick="window.setPoint('start', ${lat}, ${lng})" style="margin-bottom: 5px; width: 100%;">Set Start</button>
+        <button onclick="window.setPoint('end', ${lat}, ${lng})" style="width: 100%;">Set End</button>
+    `;
+
+    mapPopup
+        .setLatLng(e.latlng)
+        .setContent(content)
+        .openOn(map);
+});
+
+window.setPoint = function(type, lat, lng) {
+    if (type === 'start') {
+        startLatInput.value = lat;
+        startLonInput.value = lng;
+        startMarker.setLatLng([lat, lng]);
+    } else {
+        endLatInput.value = lat;
+        endLonInput.value = lng;
+        endMarker.setLatLng([lat, lng]);
+    }
+    map.closePopup();
+};
+
 // Load assets
 fetch('/api/security-assets')
     .then(response => response.json())
