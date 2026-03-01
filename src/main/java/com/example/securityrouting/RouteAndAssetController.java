@@ -11,6 +11,10 @@ import com.graphhopper.util.JsonFeature;
 import com.graphhopper.util.JsonFeatureCollection;
 import com.graphhopper.util.shapes.GHPoint;
 import com.graphhopper.util.shapes.GHPoint3D;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.Geometry;
+import org.locationtech.jts.geom.GeometryFactory;
+import org.locationtech.jts.geom.LineString;
 import org.n52.jackson.datatype.jts.JtsModule;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -147,14 +151,42 @@ public class RouteAndAssetController {
 
         String etaSafeHaven = (nearestSafeHaven != null) ? String.format("%.1f km", minDistance / 1000.0) : "N/A";
 
-        // Construct GeoJSON manually
+        // Construct GeoJSON manually and JTS LineString for intersection
         Map<String, Object> geometry = new HashMap<>();
         geometry.put("type", "LineString");
         List<List<Double>> coords = new ArrayList<>();
+        Coordinate[] jtsCoords = new Coordinate[path.getPoints().size()];
+        int idx = 0;
         for (GHPoint3D p : path.getPoints()) {
             coords.add(Arrays.asList(p.lon, p.lat));
+            jtsCoords[idx++] = new Coordinate(p.lon, p.lat);
         }
         geometry.put("coordinates", coords);
+
+        GeometryFactory geometryFactory = new GeometryFactory();
+        LineString routeLineString = jtsCoords.length > 1 ? geometryFactory.createLineString(jtsCoords) : null;
+
+        List<String> intersectedThreats = new ArrayList<>();
+        if (routeLineString != null) {
+            List<Geometry> threatPolygons = threatProcessor.getThreatPolygons();
+            List<Map<String, Object>> threatFeatures = threatProcessor.getThreatFeatures();
+
+            for (int i = 0; i < threatPolygons.size(); i++) {
+                Geometry polygon = threatPolygons.get(i);
+                if (routeLineString.intersects(polygon)) {
+                    Map<String, Object> feature = threatFeatures.get(i);
+                    Object propertiesObj = feature.get("properties");
+                    String threatName = "Unnamed Threat";
+                    if (propertiesObj instanceof Map) {
+                        Map<String, Object> properties = (Map<String, Object>) propertiesObj;
+                        if (properties.containsKey("name")) {
+                            threatName = String.valueOf(properties.get("name"));
+                        }
+                    }
+                    intersectedThreats.add(threatName);
+                }
+            }
+        }
 
         RouteResponse routeResponse = RouteResponse.builder()
                 .geometry(geometry)
@@ -163,6 +195,7 @@ public class RouteAndAssetController {
                 .chokePointsAvoided(0)
                 .proximityScore(minDistance)
                 .etaToNearestSafeHaven(etaSafeHaven)
+                .intersectedThreats(intersectedThreats)
                 .build();
 
         return ResponseEntity.ok(routeResponse);

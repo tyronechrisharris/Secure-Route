@@ -2,6 +2,7 @@ package com.example.securityrouting;
 
 import lombok.Builder;
 import lombok.Data;
+import java.util.List;
 import java.util.Map;
 
 @Data
@@ -13,4 +14,5 @@ public class RouteResponse {
     private int chokePointsAvoided;
     private double proximityScore;
     private String etaToNearestSafeHaven;
+    private List<String> intersectedThreats;
 }

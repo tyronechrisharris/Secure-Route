@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>Security Routing Dashboard</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.css" />
     <style>
         body { margin: 0; padding: 0; display: flex; font-family: 'Segoe UI', sans-serif; height: 100vh; }
         #sidebar { width: 350px; background: #1a1a1a; color: #f0f0f0; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; box-shadow: 2px 0 5px rgba(0,0,0,0.5); z-index: 1000; }
@@ -56,6 +57,8 @@
         <div class="asset-toggle"><input type="checkbox" id="toggleEMS" checked onchange="toggleLayer('EMS')"> EMS / Hospital</div>
         <div class="asset-toggle"><input type="checkbox" id="toggleMilitary" checked onchange="toggleLayer('MILITARY')"> Military</div>
         <div class="asset-toggle"><input type="checkbox" id="toggleSafeHaven" checked onchange="toggleLayer('SAFE_HAVEN')"> Safe Havens</div>
+
+        <button onclick="saveThreats()" style="margin-top: 10px; background: #e74c3c;">Save Threats</button>
     </div>
 
     <div id="assessment">
@@ -65,12 +68,17 @@
         <div class="metric"><span>Choke Points Avoided:</span> <span id="valChoke" class="metric-value">-</span></div>
         <div class="metric"><span>Proximity to Support:</span> <span id="valProximity" class="metric-value">-</span></div>
         <div class="metric"><span>ETA to Safe Haven:</span> <span id="valSafeHaven" class="metric-value">-</span></div>
+        <div class="metric">
+            <span>Intersected Threats:</span>
+            <span id="valThreats" class="metric-value" style="font-weight: bold;">-</span>
+        </div>
     </div>
 </div>
 
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

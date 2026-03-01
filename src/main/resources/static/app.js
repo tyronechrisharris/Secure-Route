@@ -10,8 +10,22 @@ var layers = {
     'EMS': L.layerGroup().addTo(map),
     'MILITARY': L.layerGroup().addTo(map),
     'SAFE_HAVEN': L.layerGroup().addTo(map),
-    'ROUTE': L.layerGroup().addTo(map)
+    'ROUTE': L.layerGroup().addTo(map),
+    'THREATS': L.layerGroup().addTo(map)
 };
+
+map.pm.addControls({
+    position: 'topleft',
+    drawMarker: true,
+    drawPolygon: true,
+    editMode: true,
+    drawPolyline: false,
+    drawRectangle: false,
+    drawCircle: false,
+    drawCircleMarker: false,
+    drawText: false,
+    removalMode: true,
+});
 
 var icons = {
     'POLICE': L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-blue.png', iconSize: [25, 41], iconAnchor: [12, 41]}),
@@ -19,6 +33,22 @@ var icons = {
     'MILITARY': L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-black.png', iconSize: [25, 41], iconAnchor: [12, 41]}),
     'SAFE_HAVEN': L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png', iconSize: [25, 41], iconAnchor: [12, 41]})
 };
+
+// Load threats
+fetch('/api/threats')
+    .then(response => response.json())
+    .then(data => {
+        L.geoJSON(data, {
+            pmIgnore: false,
+            style: { color: 'red', fillColor: '#f03', fillOpacity: 0.5 },
+            onEachFeature: function(feature, layer) {
+                if (feature.properties && feature.properties.name) {
+                    layer.bindPopup("<b>Threat:</b> " + feature.properties.name);
+                }
+            }
+        }).addTo(layers['THREATS']);
+    })
+    .catch(err => console.error("Failed to load threats:", err));
 
 // Load assets
 fetch('/api/security-assets')
@@ -101,6 +131,26 @@ window.setPoint = function(type, lat, lng) {
     map.closePopup();
 };
 
+function saveThreats() {
+    // Extract Geoman layers
+    let featureGroup = L.featureGroup(map.pm.getGeomanLayers());
+    let geojson = featureGroup.toGeoJSON();
+
+    fetch('/api/threats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(geojson)
+    })
+    .then(response => {
+        if (!response.ok) throw new Error("Failed to save threats");
+        alert("Threats saved successfully!");
+    })
+    .catch(error => {
+        alert("Error saving threats: " + error);
+        console.error(error);
+    });
+}
+
 function calculateRoute() {
     var startLat = parseFloat(document.getElementById('startLat').value);
     var startLon = parseFloat(document.getElementById('startLon').value);
@@ -143,6 +193,19 @@ function calculateRoute() {
         document.getElementById('valChoke').innerText = data.chokePointsAvoided; // Mocked for now
         document.getElementById('valProximity').innerText = (data.proximityScore / 1000).toFixed(2) + " km";
         document.getElementById('valSafeHaven').innerText = data.etaToNearestSafeHaven;
+
+        let threatsEl = document.getElementById('valThreats');
+        if (data.intersectedThreats && data.intersectedThreats.length > 0) {
+            threatsEl.innerText = data.intersectedThreats.join(', ');
+            threatsEl.style.color = 'red';
+            threatsEl.style.backgroundColor = 'rgba(255,0,0,0.2)';
+            threatsEl.style.padding = '2px 5px';
+            threatsEl.style.borderRadius = '3px';
+        } else {
+            threatsEl.innerText = "Clear";
+            threatsEl.style.color = '#2ecc71';
+            threatsEl.style.backgroundColor = 'transparent';
+        }
     })
     .catch(error => {
         alert("Error calculating route: " + error);
