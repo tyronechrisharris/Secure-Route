@@ -151,6 +151,48 @@ function saveThreats() {
     });
 }
 
+function uploadMap() {
+    const fileInput = document.getElementById('mapFile');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const statusDiv = document.getElementById('uploadStatus');
+
+    if (fileInput.files.length === 0) {
+        statusDiv.innerHTML = "Please select a file first.";
+        return;
+    }
+
+    const file = fileInput.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+
+    uploadBtn.disabled = true;
+    uploadBtn.innerText = "Uploading...";
+    statusDiv.innerHTML = "Uploading and processing map data. This may take a minute...";
+
+    fetch('/api/upload-map', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.text().then(text => { throw new Error(text) });
+        }
+        return response.text();
+    })
+    .then(text => {
+        statusDiv.innerHTML = "<span style='color:#2ecc71'>" + text + "</span>";
+        uploadBtn.disabled = false;
+        uploadBtn.innerText = "Upload Map Data";
+        fileInput.value = ""; // Clear the input
+    })
+    .catch(error => {
+        statusDiv.innerHTML = "<span style='color:#e74c3c'>Error: " + error.message + "</span>";
+        uploadBtn.disabled = false;
+        uploadBtn.innerText = "Upload Map Data";
+        console.error("Upload failed:", error);
+    });
+}
+
 function calculateRoute() {
     var startLat = parseFloat(document.getElementById('startLat').value);
     var startLon = parseFloat(document.getElementById('startLon').value);

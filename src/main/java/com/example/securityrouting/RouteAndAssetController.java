@@ -28,7 +28,7 @@ import java.util.*;
 public class RouteAndAssetController {
 
     @Autowired
-    private GraphHopper graphHopper;
+    private GraphHopperManager graphHopperManager;
 
     @Autowired
     private SecurityAssetExtractor assetExtractor;
@@ -116,7 +116,7 @@ public class RouteAndAssetController {
 
         ghRequest.setCustomModel(customModel);
 
-        GHResponse response = graphHopper.route(ghRequest);
+        GHResponse response = graphHopperManager.getGraphHopper().route(ghRequest);
 
         if (response.hasErrors()) {
             throw new RuntimeException("Routing failed: " + response.getErrors());
