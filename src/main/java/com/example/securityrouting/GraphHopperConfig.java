@@ -16,10 +16,16 @@ public class GraphHopperConfig {
     public GraphHopper graphHopper() {
         GraphHopper hopper = new GraphHopper();
 
-        if (new File("map-data.osm.bz2").exists()) {
+        File bz2 = new File("map-data.osm.bz2");
+        File osm = new File("map-data.osm");
+        File cache = new File("graph-cache");
+
+        if (bz2.exists()) {
             hopper.setOSMFile("map-data.osm.bz2");
-        } else {
+        } else if (osm.exists()) {
             hopper.setOSMFile("map-data.osm");
+        } else if (!cache.exists()) {
+            throw new IllegalStateException("No OSM map data file found. Please place map-data.osm or map-data.osm.bz2 in the application directory.");
         }
 
         hopper.setGraphHopperLocation("graph-cache");
