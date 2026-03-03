@@ -22,9 +22,17 @@ public class GraphHopperManager {
 
     private void initGraphHopper() {
         graphHopper = new GraphHopper();
-        graphHopper.setOSMFile("map-data.osm.bz2");
-        if (!new File("map-data.osm.bz2").exists() && new File("map-data.osm").exists()) {
-             graphHopper.setOSMFile("map-data.osm");
+
+        if (new File("map-data.osm.pbf").exists()) {
+            graphHopper.setOSMFile("map-data.osm.pbf");
+        } else if (new File("map-data.osm.bz2").exists()) {
+            graphHopper.setOSMFile("map-data.osm.bz2");
+        } else if (new File("map-data.osm").exists()) {
+            graphHopper.setOSMFile("map-data.osm");
+        } else {
+            // Default to .pbf for initial configuration if no files exist yet,
+            // or maybe bz2 to maintain backwards compatibility when building cache.
+            graphHopper.setOSMFile("map-data.osm.pbf");
         }
 
         graphHopper.setGraphHopperLocation("graph-cache");

@@ -36,21 +36,24 @@ public class MapController {
 
         boolean isBz2 = originalFilename.endsWith(".osm.bz2");
         boolean isOsm = originalFilename.endsWith(".osm");
+        boolean isPbf = originalFilename.endsWith(".osm.pbf");
 
-        if (!isBz2 && !isOsm) {
-            return new ResponseEntity<>("Only .osm and .osm.bz2 files are supported.", HttpStatus.BAD_REQUEST);
+        if (!isBz2 && !isOsm && !isPbf) {
+            return new ResponseEntity<>("Only .osm, .osm.bz2, and .osm.pbf files are supported.", HttpStatus.BAD_REQUEST);
         }
 
         try {
             // Delete existing map files to ensure we use the new one
+            File pbfFile = new File("map-data.osm.pbf");
             File bz2File = new File("map-data.osm.bz2");
             File osmFile = new File("map-data.osm");
 
+            if (pbfFile.exists()) pbfFile.delete();
             if (bz2File.exists()) bz2File.delete();
             if (osmFile.exists()) osmFile.delete();
 
             // Save new file
-            String targetFileName = isBz2 ? "map-data.osm.bz2" : "map-data.osm";
+            String targetFileName = isPbf ? "map-data.osm.pbf" : (isBz2 ? "map-data.osm.bz2" : "map-data.osm");
             File targetFile = new File(targetFileName);
 
             try (InputStream is = file.getInputStream();
