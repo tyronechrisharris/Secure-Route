@@ -42,13 +42,52 @@ fetch('/api/threats')
             pmIgnore: false,
             style: { color: 'red', fillColor: '#f03', fillOpacity: 0.5 },
             onEachFeature: function(feature, layer) {
-                if (feature.properties && feature.properties.name) {
-                    layer.bindPopup("<b>Threat:</b> " + feature.properties.name);
+                if (feature.properties) {
+                    let popupContent = "<b>Threat:</b> " + (feature.properties.name || "Unnamed");
+                    if (feature.properties.severity) {
+                        popupContent += "<br><b>Severity:</b> " + feature.properties.severity;
+                    }
+                    layer.bindPopup(popupContent);
                 }
             }
         }).addTo(layers['THREATS']);
     })
     .catch(err => console.error("Failed to load threats:", err));
+
+map.on('pm:create', function(e) {
+    if (e.shape === 'Polygon' || e.shape === 'Rectangle') {
+        const layer = e.layer;
+
+        let name = prompt("Enter Threat Area Name:", "New Threat");
+        if (name === null) {
+            map.removeLayer(layer);
+            return;
+        }
+
+        let severityInput = prompt("Enter Threat Level (LOW, MEDIUM, HIGH):", "HIGH");
+        if (severityInput === null) {
+            map.removeLayer(layer);
+            return;
+        }
+
+        let severity = severityInput.trim().toUpperCase();
+        if (!['LOW', 'MEDIUM', 'HIGH'].includes(severity)) {
+            severity = 'HIGH'; // Default to HIGH if invalid
+        }
+
+        layer.feature = layer.feature || { type: 'Feature', properties: {} };
+        layer.feature.properties.name = name;
+        layer.feature.properties.severity = severity;
+
+        layer.setStyle({ color: 'red', fillColor: '#f03', fillOpacity: 0.5 });
+        layer.bindPopup("<b>Threat:</b> " + name + "<br><b>Severity:</b> " + severity);
+
+        // Ensure the newly created threat area is added to the THREATS layer group
+        // so it behaves identically to loaded ones when saving, etc.
+        // Geoman adds it to the map natively, so we can also add it to our layers group.
+        layer.addTo(layers['THREATS']);
+    }
+});
 
 // Load assets
 fetch('/api/security-assets')
@@ -107,7 +146,8 @@ map.on('click', function(e) {
         <div style="text-align: center;">
             <p style="margin: 0 0 10px 0;"><strong>Set Location</strong></p>
             <button onclick="setPoint('start', ${lat}, ${lng})" style="margin-bottom: 5px; width: 100%; cursor: pointer;">Set Start Point</button><br>
-            <button onclick="setPoint('end', ${lat}, ${lng})" style="width: 100%; cursor: pointer;">Set End Point</button>
+            <button onclick="setPoint('end', ${lat}, ${lng})" style="margin-bottom: 5px; width: 100%; cursor: pointer;">Set End Point</button><br>
+            <button onclick="startDrawingThreat()" style="width: 100%; cursor: pointer; background: #e74c3c;">Create Threat Area</button>
         </div>
     `;
 
@@ -116,6 +156,15 @@ map.on('click', function(e) {
         .setContent(content)
         .openOn(map);
 });
+
+// Expose startDrawingThreat globally so popup buttons can call it
+window.startDrawingThreat = function() {
+    map.closePopup();
+    map.pm.enableDraw('Polygon', {
+        snappable: true,
+        snapDistance: 20,
+    });
+};
 
 // Expose setPoint globally so popup buttons can call it
 window.setPoint = function(type, lat, lng) {
