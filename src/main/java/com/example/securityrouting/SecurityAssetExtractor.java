@@ -1,6 +1,12 @@
 package com.example.securityrouting;
 
+import com.graphhopper.reader.ReaderElement;
+import com.graphhopper.reader.ReaderNode;
+import com.graphhopper.reader.osm.OSMInput;
+import com.graphhopper.reader.osm.OSMInputFile;
 import org.springframework.stereotype.Service;
+
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -9,12 +15,60 @@ public class SecurityAssetExtractor {
 
     private final List<SecurityAsset> assets = new ArrayList<>();
 
-    public SecurityAssetExtractor() {
-        // Dummy data for testing - in production this would parse OSM or GeoJSON
-        assets.add(new SecurityAsset("Police Station Central", 51.5074, -0.1278, "POLICE"));
-        assets.add(new SecurityAsset("EMS City Hospital", 51.5080, -0.1285, "EMS"));
-        assets.add(new SecurityAsset("Safe Haven 1", 51.5090, -0.1260, "SAFE_HAVEN"));
-        assets.add(new SecurityAsset("Military Base Alpha", 51.5100, -0.1250, "MILITARY"));
+    public synchronized void extractAssetsFromOSM(File osmFile) {
+        System.out.println("Extracting security assets from: " + osmFile.getAbsolutePath());
+        assets.clear();
+
+        if (!osmFile.exists()) {
+            System.err.println("OSM file not found for asset extraction: " + osmFile.getAbsolutePath());
+            return;
+        }
+
+        try (OSMInput in = new OSMInputFile(osmFile).setWorkerThreads(2).open()) {
+            ReaderElement item;
+            while ((item = in.getNext()) != null) {
+                if (item instanceof ReaderNode) {
+                    ReaderNode node = (ReaderNode) item;
+                    String amenity = node.getTag("amenity");
+                    String military = node.getTag("military");
+                    String emergency = node.getTag("emergency");
+
+                    if (amenity != null) {
+                        if (amenity.equals("police")) {
+                            addAsset(node, "Police Station", "POLICE");
+                        } else if (amenity.equals("hospital") || amenity.equals("clinic")) {
+                            addAsset(node, "Medical Facility", "EMS");
+                        }
+                    }
+
+                    if (military != null && (military.equals("base") || military.equals("barracks") || military.equals("checkpoint"))) {
+                        addAsset(node, "Military Installation", "MILITARY");
+                    }
+
+                    if (emergency != null && emergency.equals("ambulance_station")) {
+                        addAsset(node, "EMS Station", "EMS");
+                    }
+
+                    // Custom tag for safe havens, or fallback to embassies etc
+                    if (node.hasTag("security", "safe_haven") || node.hasTag("diplomatic", "embassy") || node.hasTag("amenity", "embassy")) {
+                        addAsset(node, "Safe Haven", "SAFE_HAVEN");
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Failed to extract assets from OSM: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        System.out.println("Extracted " + assets.size() + " security assets.");
+    }
+
+    private void addAsset(ReaderNode node, String defaultName, String type) {
+        String name = node.getTag("name");
+        if (name == null || name.isEmpty()) {
+            name = defaultName;
+        }
+        assets.add(new SecurityAsset(name, node.getLat(), node.getLon(), type));
     }
 
     public List<SecurityAsset> getAssets() {
