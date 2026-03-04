@@ -35,6 +35,9 @@ var icons = {
 };
 
 // Load threats
+
+let threatLayerMap = {};
+
 fetch('/api/threats')
     .then(response => response.json())
     .then(data => {
@@ -42,17 +45,18 @@ fetch('/api/threats')
             pmIgnore: false,
             style: { color: 'red', fillColor: '#f03', fillOpacity: 0.5 },
             onEachFeature: function(feature, layer) {
-                if (feature.properties) {
-                    let popupContent = "<b>Threat:</b> " + (feature.properties.name || "Unnamed");
-                    if (feature.properties.severity) {
-                        popupContent += "<br><b>Severity:</b> " + feature.properties.severity;
-                    }
-                    layer.bindPopup(popupContent);
-                }
+                let id = L.stamp(layer);
+                threatLayerMap[id] = layer;
+                updateThreatPopup(layer, feature.properties.name, feature.properties.severity);
+                layer.on('pm:update', saveThreats);
+                layer.on('pm:dragend', saveThreats);
+                layer.on('pm:remove', saveThreats);
             }
         }).addTo(layers['THREATS']);
     })
     .catch(err => console.error("Failed to load threats:", err));
+
+
 
 map.on('pm:create', function(e) {
     if (e.shape === 'Polygon' || e.shape === 'Rectangle') {
@@ -80,14 +84,73 @@ map.on('pm:create', function(e) {
         layer.feature.properties.severity = severity;
 
         layer.setStyle({ color: 'red', fillColor: '#f03', fillOpacity: 0.5 });
-        layer.bindPopup("<b>Threat:</b> " + name + "<br><b>Severity:</b> " + severity);
 
-        // Ensure the newly created threat area is added to the THREATS layer group
-        // so it behaves identically to loaded ones when saving, etc.
-        // Geoman adds it to the map natively, so we can also add it to our layers group.
+        let id = L.stamp(layer);
+        threatLayerMap[id] = layer;
+        updateThreatPopup(layer, name, severity);
+
         layer.addTo(layers['THREATS']);
+
+        layer.on('pm:update', saveThreats);
+        layer.on('pm:dragend', saveThreats);
+        layer.on('pm:remove', saveThreats);
+
+        saveThreats(); // Auto-save on creation
     }
 });
+
+map.on('pm:remove', function(e) {
+    if (threatLayerMap[L.stamp(e.layer)]) {
+        layers['THREATS'].removeLayer(e.layer);
+        delete threatLayerMap[L.stamp(e.layer)];
+        saveThreats();
+    }
+});
+
+window.updateThreatPopup = function(layer, name, severity) {
+    let id = L.stamp(layer);
+    let popupContent = `<b>Threat:</b> ${name || "Unnamed"}<br><b>Severity:</b> ${severity || "UNKNOWN"}<br><br>
+        <button onclick="editThreatProperties(${id})" style="background: #f39c12; margin-bottom: 5px;">Edit Info</button><br>
+        <button onclick="deleteThreat(${id})" style="background: #e74c3c;">Delete Threat</button>`;
+    layer.bindPopup(popupContent);
+};
+
+window.editThreatProperties = function(id) {
+    let layer = threatLayerMap[id];
+    if (!layer) return;
+
+    let currentName = layer.feature.properties.name || "New Threat";
+    let currentSeverity = layer.feature.properties.severity || "HIGH";
+
+    let name = prompt("Edit Threat Area Name:", currentName);
+    if (name === null) return;
+
+    let severityInput = prompt("Edit Threat Level (LOW, MEDIUM, HIGH):", currentSeverity);
+    if (severityInput === null) return;
+
+    let severity = severityInput.trim().toUpperCase();
+    if (!['LOW', 'MEDIUM', 'HIGH'].includes(severity)) {
+        severity = 'HIGH';
+    }
+
+    layer.feature.properties.name = name;
+    layer.feature.properties.severity = severity;
+
+    updateThreatPopup(layer, name, severity);
+    saveThreats();
+};
+
+window.deleteThreat = function(id) {
+    let layer = threatLayerMap[id];
+    if (!layer) return;
+
+    if (confirm("Are you sure you want to delete this threat area?")) {
+        map.removeLayer(layer);
+        layers['THREATS'].removeLayer(layer);
+        delete threatLayerMap[id];
+        saveThreats();
+    }
+};
 
 // Load assets
 fetch('/api/security-assets')
@@ -180,10 +243,10 @@ window.setPoint = function(type, lat, lng) {
     map.closePopup();
 };
 
+
 function saveThreats() {
-    // Extract Geoman layers
-    let featureGroup = L.featureGroup(map.pm.getGeomanLayers());
-    let geojson = featureGroup.toGeoJSON();
+    // We only want to save features in the THREATS layer group
+    let geojson = layers['THREATS'].toGeoJSON();
 
     fetch('/api/threats', {
         method: 'POST',
@@ -192,11 +255,11 @@ function saveThreats() {
     })
     .then(response => {
         if (!response.ok) throw new Error("Failed to save threats");
-        alert("Threats saved successfully!");
+        // No alert, to be seamless
+        console.log("Threats auto-saved successfully!");
     })
     .catch(error => {
-        alert("Error saving threats: " + error);
-        console.error(error);
+        console.error("Error saving threats: ", error);
     });
 }
 
