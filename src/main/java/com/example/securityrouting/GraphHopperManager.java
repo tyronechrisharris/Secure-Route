@@ -6,6 +6,7 @@ import com.graphhopper.config.LMProfile;
 import com.graphhopper.config.Profile;
 import com.graphhopper.util.CustomModel;
 import jakarta.annotation.PreDestroy;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
@@ -16,22 +17,37 @@ public class GraphHopperManager {
 
     private GraphHopper graphHopper;
 
+    @Autowired
+    private SecurityAssetExtractor securityAssetExtractor;
+
     public GraphHopperManager() {
+    }
+
+    @jakarta.annotation.PostConstruct
+    public void init() {
         initGraphHopper();
     }
 
     private void initGraphHopper() {
         graphHopper = new GraphHopper();
 
+        File osmFileToUse = null;
+
         if (new File("map-data.osm.pbf").exists()) {
-            graphHopper.setOSMFile("map-data.osm.pbf");
+            osmFileToUse = new File("map-data.osm.pbf");
         } else if (new File("map-data.osm.bz2").exists()) {
-            graphHopper.setOSMFile("map-data.osm.bz2");
+            osmFileToUse = new File("map-data.osm.bz2");
         } else if (new File("map-data.osm").exists()) {
-            graphHopper.setOSMFile("map-data.osm");
+            osmFileToUse = new File("map-data.osm");
+        }
+
+        if (osmFileToUse != null) {
+            graphHopper.setOSMFile(osmFileToUse.getAbsolutePath());
+            if (securityAssetExtractor != null) {
+                securityAssetExtractor.extractAssetsFromOSM(osmFileToUse);
+            }
         } else {
-            // Default to .pbf for initial configuration if no files exist yet,
-            // or maybe bz2 to maintain backwards compatibility when building cache.
+            // Default to .pbf for initial configuration if no files exist yet
             graphHopper.setOSMFile("map-data.osm.pbf");
         }
 
