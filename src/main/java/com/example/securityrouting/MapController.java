@@ -78,4 +78,15 @@ public class MapController {
             return new ResponseEntity<>("Failed to process uploaded file: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
+
+    @PostMapping("/reload-map")
+    public ResponseEntity<String> reloadMap() {
+        try {
+            graphHopperManager.reloadGraphHopper();
+            return new ResponseEntity<>("Successfully reloaded map data", HttpStatus.OK);
+        } catch (IOException e) {
+            e.printStackTrace();
+            return new ResponseEntity<>("Failed to reload map data: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
 }

@@ -9,6 +9,11 @@
         body { margin: 0; padding: 0; display: flex; font-family: 'Segoe UI', sans-serif; height: 100vh; }
         #sidebar { width: 350px; background: #1a1a1a; color: #f0f0f0; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; box-shadow: 2px 0 5px rgba(0,0,0,0.5); z-index: 1000; }
         #map { flex-grow: 1; height: 100%; }
+        .view-section { display: none; flex-direction: column; gap: 15px; }
+        .view-section.active { display: flex; }
+        .tab-container { display: flex; gap: 10px; margin-bottom: 10px; }
+        .tab-btn { flex: 1; padding: 8px; background: #333; border: 1px solid #555; color: #ccc; cursor: pointer; border-radius: 3px; }
+        .tab-btn.active { background: #4facfe; color: white; border-color: #4facfe; }
         h2 { margin-top: 0; color: #4facfe; }
         .control-group { background: #2c2c2c; padding: 15px; border-radius: 5px; }
         label { display: block; margin-bottom: 5px; font-weight: bold; }
@@ -20,6 +25,13 @@
         .metric { display: flex; justify-content: space-between; margin-bottom: 5px; border-bottom: 1px solid #444; padding-bottom: 5px; }
         .metric:last-child { border-bottom: none; }
         .metric-value { color: #00f2fe; font-weight: bold; }
+        #drop-zone { border: 2px dashed #555; border-radius: 5px; padding: 20px; text-align: center; color: #888; cursor: pointer; margin-bottom: 10px; }
+        #drop-zone.hover { border-color: #4facfe; background: #2c2c2c; color: #4facfe; }
+        #log-console { background: #000; color: #0f0; padding: 10px; border-radius: 3px; font-family: monospace; height: 150px; overflow-y: auto; font-size: 11px; margin-top: 10px; white-space: pre-wrap; }
+        .status-idle { color: #888; }
+        .status-processing { color: #f39c12; }
+        .status-success { color: #2ecc71; }
+        .status-error { color: #e74c3c; }
     </style>
 </head>
 <body>
@@ -27,45 +39,72 @@
 <div id="sidebar">
     <h2>Security Routing</h2>
 
-    <div class="control-group">
-        <label>Route Parameters</label>
-        <label>Start (Lat, Lon)</label>
-        <div style="display: flex; gap: 5px;">
-            <input type="number" id="startLat" placeholder="Lat" step="0.0001" value="51.5074">
-            <input type="number" id="startLon" placeholder="Lon" step="0.0001" value="-0.1278">
-        </div>
-
-        <label>End (Lat, Lon)</label>
-        <div style="display: flex; gap: 5px;">
-            <input type="number" id="endLat" placeholder="Lat" step="0.0001" value="51.5150">
-            <input type="number" id="endLon" placeholder="Lon" step="0.0001" value="-0.1100">
-        </div>
-
-        <label>Threat Avoidance Level</label>
-        <select id="threatLevel">
-            <option value="LOW">Low (Standard)</option>
-            <option value="MEDIUM">Medium (Caution)</option>
-            <option value="HIGH">High (Max Security)</option>
-        </select>
-
-        <button onclick="calculateRoute()">Calculate Secure Route</button>
+    <div class="tab-container">
+        <button class="tab-btn active" onclick="switchView('routing')">Routing</button>
+        <button class="tab-btn" onclick="switchView('data')">Data Management</button>
     </div>
 
-    <div class="control-group">
-        <label>Map Data</label>
-        <input type="file" id="mapFile" accept=".osm,.bz2,.pbf" style="margin-bottom: 5px; color: white;" />
-        <button onclick="uploadMap()" id="uploadBtn" style="background: #e67e22; margin-bottom: 15px;">Upload Map Data</button>
-        <div id="uploadStatus" style="font-size: 0.9em; margin-bottom: 10px; color: #f39c12;"></div>
+    <div id="routing-view" class="view-section active">
+        <div class="control-group">
+            <label>Route Parameters</label>
+            <label>Start (Lat, Lon)</label>
+            <div style="display: flex; gap: 5px;">
+                <input type="number" id="startLat" placeholder="Lat" step="0.0001" value="51.5074">
+                <input type="number" id="startLon" placeholder="Lon" step="0.0001" value="-0.1278">
+            </div>
+
+            <label>End (Lat, Lon)</label>
+            <div style="display: flex; gap: 5px;">
+                <input type="number" id="endLat" placeholder="Lat" step="0.0001" value="51.5150">
+                <input type="number" id="endLon" placeholder="Lon" step="0.0001" value="-0.1100">
+            </div>
+
+            <label>Threat Avoidance Level</label>
+            <select id="threatLevel">
+                <option value="LOW">Low (Standard)</option>
+                <option value="MEDIUM">Medium (Caution)</option>
+                <option value="HIGH">High (Max Security)</option>
+            </select>
+
+            <button onclick="calculateRoute()">Calculate Secure Route</button>
+        </div>
+
+        <div class="control-group">
+            <label>Asset Visibility</label>
+            <div class="asset-toggle"><input type="checkbox" id="togglePolice" checked onchange="toggleLayer('POLICE')"> Police</div>
+            <div class="asset-toggle"><input type="checkbox" id="toggleEMS" checked onchange="toggleLayer('EMS')"> EMS / Hospital</div>
+            <div class="asset-toggle"><input type="checkbox" id="toggleMilitary" checked onchange="toggleLayer('MILITARY')"> Military</div>
+            <div class="asset-toggle"><input type="checkbox" id="toggleSafeHaven" checked onchange="toggleLayer('SAFE_HAVEN')"> Safe Havens</div>
+
+            <button onclick="saveThreats()" style="margin-top: 10px; background: #e74c3c;">Save Threats</button>
+        </div>
     </div>
 
-    <div class="control-group">
-        <label>Asset Visibility</label>
-        <div class="asset-toggle"><input type="checkbox" id="togglePolice" checked onchange="toggleLayer('POLICE')"> Police</div>
-        <div class="asset-toggle"><input type="checkbox" id="toggleEMS" checked onchange="toggleLayer('EMS')"> EMS / Hospital</div>
-        <div class="asset-toggle"><input type="checkbox" id="toggleMilitary" checked onchange="toggleLayer('MILITARY')"> Military</div>
-        <div class="asset-toggle"><input type="checkbox" id="toggleSafeHaven" checked onchange="toggleLayer('SAFE_HAVEN')"> Safe Havens</div>
+    <div id="data-view" class="view-section">
+        <div class="control-group">
+            <label>Upload New .pbf</label>
+            <div id="drop-zone" onclick="document.getElementById('file-input').click()">
+                Drag & Drop or Click to Upload
+                <input type="file" id="file-input" style="display: none" accept=".pbf,.osm,.bz2" onchange="handleFileUpload(this.files[0])">
+            </div>
+            <div id="upload-progress-bar" style="display: none; height: 5px; background: #4facfe; width: 0%; margin-bottom: 10px; transition: width 0.3s;"></div>
+        </div>
 
-        <button onclick="saveThreats()" style="margin-top: 10px; background: #e74c3c;">Save Threats</button>
+        <div class="control-group">
+            <label>Cache Selection</label>
+            <select id="cache-select">
+                <option value="">Select a cached file...</option>
+            </select>
+            <div style="display: flex; gap: 5px; margin-top: 10px;">
+                <button onclick="runTransform()" id="transform-btn" style="background: #e67e22;">Transform</button>
+                <button onclick="applyToMap()" id="apply-btn" style="background: #2ecc71;">Apply to Map</button>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <label>Status: <span id="status-indicator" class="status-idle">Idle</span></label>
+            <div id="log-console"></div>
+        </div>
     </div>
 
     <div id="assessment">

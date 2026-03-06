@@ -263,46 +263,153 @@ function saveThreats() {
     });
 }
 
-function uploadMap() {
-    const fileInput = document.getElementById('mapFile');
-    const uploadBtn = document.getElementById('uploadBtn');
-    const statusDiv = document.getElementById('uploadStatus');
+// View Switching
+window.switchView = function(view) {
+    document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
 
-    if (fileInput.files.length === 0) {
-        statusDiv.innerHTML = "Please select a file first.";
-        return;
+    if (view === 'routing') {
+        document.getElementById('routing-view').classList.add('active');
+        document.querySelectorAll('.tab-btn')[0].classList.add('active');
+    } else {
+        document.getElementById('data-view').classList.add('active');
+        document.querySelectorAll('.tab-btn')[1].classList.add('active');
+        loadMapList();
     }
+};
 
-    const file = fileInput.files[0];
+// Map Management Logic
+const nodeApi = 'http://localhost:3000/api';
+
+async function loadMapList() {
+    try {
+        const response = await fetch(`${nodeApi}/maps`);
+        const maps = await response.json();
+        const select = document.getElementById('cache-select');
+        select.innerHTML = '<option value="">Select a cached file...</option>';
+        maps.forEach(map => {
+            const opt = document.createElement('option');
+            opt.value = map;
+            opt.innerText = map;
+            select.appendChild(opt);
+        });
+    } catch (err) {
+        console.error("Failed to load map list:", err);
+    }
+}
+
+// Drag & Drop
+const dropZone = document.getElementById('drop-zone');
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    dropZone.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    }, false);
+});
+
+dropZone.addEventListener('dragenter', () => dropZone.classList.add('hover'));
+dropZone.addEventListener('dragover', () => dropZone.classList.add('hover'));
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('hover'));
+dropZone.addEventListener('drop', (e) => {
+    dropZone.classList.remove('hover');
+    handleFileUpload(e.dataTransfer.files[0]);
+});
+
+window.handleFileUpload = async function(file) {
+    if (!file) return;
+
     const formData = new FormData();
     formData.append('file', file);
 
-    uploadBtn.disabled = true;
-    uploadBtn.innerText = "Uploading...";
-    statusDiv.innerHTML = "Uploading and processing map data. This may take a minute...";
+    updateStatus('Uploading...', 'processing');
+    const progressBar = document.getElementById('upload-progress-bar');
+    progressBar.style.display = 'block';
+    progressBar.style.width = '0%';
 
-    fetch('/api/upload-map', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => {
-        if (!response.ok) {
-            return response.text().then(text => { throw new Error(text) });
+    try {
+        const response = await fetch(`${nodeApi}/map/upload`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (response.ok) {
+            updateStatus('Upload Success', 'success');
+            progressBar.style.width = '100%';
+            setTimeout(() => progressBar.style.display = 'none', 1000);
+            loadMapList();
+        } else {
+            throw new Error(await response.text());
         }
-        return response.text();
-    })
-    .then(text => {
-        statusDiv.innerHTML = "<span style='color:#2ecc71'>" + text + "</span>";
-        uploadBtn.disabled = false;
-        uploadBtn.innerText = "Upload Map Data";
-        fileInput.value = ""; // Clear the input
-    })
-    .catch(error => {
-        statusDiv.innerHTML = "<span style='color:#e74c3c'>Error: " + error.message + "</span>";
-        uploadBtn.disabled = false;
-        uploadBtn.innerText = "Upload Map Data";
-        console.error("Upload failed:", error);
-    });
+    } catch (err) {
+        updateStatus('Upload Failed: ' + err.message, 'error');
+    }
+};
+
+window.runTransform = function() {
+    const select = document.getElementById('cache-select');
+    const file = select.value;
+    if (!file) {
+        alert("Please select a file to transform.");
+        return;
+    }
+
+    const consoleEl = document.getElementById('log-console');
+    consoleEl.innerHTML = '';
+    updateStatus('Transforming...', 'processing');
+
+    const eventSource = new EventSource(`${nodeApi}/map/transform?file=${file}`);
+
+    eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.log) {
+            consoleEl.innerText += data.log;
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+        }
+        if (data.status === 'success') {
+            updateStatus('Transform Success', 'success');
+            eventSource.close();
+        } else if (data.status === 'error') {
+            updateStatus('Transform Error: ' + data.message, 'error');
+            eventSource.close();
+        }
+    };
+
+    eventSource.onerror = (err) => {
+        updateStatus('SSE Error', 'error');
+        eventSource.close();
+    };
+};
+
+window.applyToMap = async function() {
+    const select = document.getElementById('cache-select');
+    const file = select.value;
+
+    updateStatus('Applying Map...', 'processing');
+
+    try {
+        const response = await fetch(`${nodeApi}/map/apply`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ file: file || 'map-data.osm.pbf' })
+        });
+
+        if (response.ok) {
+            updateStatus('Map Applied & Reloaded', 'success');
+            // Refresh assets on map
+            location.reload();
+        } else {
+            const data = await response.json();
+            throw new Error(data.error);
+        }
+    } catch (err) {
+        updateStatus('Apply Failed: ' + err.message, 'error');
+    }
+};
+
+function updateStatus(text, type) {
+    const el = document.getElementById('status-indicator');
+    el.innerText = text;
+    el.className = 'status-' + type;
 }
 
 function calculateRoute() {
