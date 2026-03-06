@@ -78,4 +78,24 @@ public class MapController {
             return new ResponseEntity<>("Failed to process uploaded file: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
+
+    @PostMapping("/reload-map")
+    public ResponseEntity<String> reloadMap() {
+        try {
+            graphHopperManager.reloadGraphHopper();
+            return new ResponseEntity<>("Successfully reloaded map data", HttpStatus.OK);
+        } catch (IOException e) {
+            e.printStackTrace();
+            return new ResponseEntity<>("Failed to reload map data: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @GetMapping("/map-bounds")
+    public ResponseEntity<?> getMapBounds() {
+        com.graphhopper.util.shapes.BBox bounds = graphHopperManager.getMapBounds();
+        if (bounds != null) {
+            return new ResponseEntity<>(bounds, HttpStatus.OK);
+        }
+        return new ResponseEntity<>("Bounds not available", HttpStatus.NOT_FOUND);
+    }
 }
