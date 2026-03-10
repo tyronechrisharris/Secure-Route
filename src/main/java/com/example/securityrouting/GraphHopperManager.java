@@ -81,8 +81,8 @@ public class GraphHopperManager {
     }
 
     public com.graphhopper.util.shapes.BBox getMapBounds() {
-        if (graphHopper != null && graphHopper.getGraphHopperStorage() != null) {
-            return graphHopper.getGraphHopperStorage().getBounds();
+        if (graphHopper != null && graphHopper.getBaseGraph() != null) {
+            return graphHopper.getBaseGraph().getBounds();
         }
         return null;
     }

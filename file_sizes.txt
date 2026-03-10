@@ -1,2 +1,0 @@
--rw-rw-r-- 1 jules jules 896 Mar  6 00:07 map-data.osm
--rw-rw-r-- 1 jules jules 365 Mar  6 14:45 map-data.osm.pbf
