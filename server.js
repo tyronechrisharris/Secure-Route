@@ -12,6 +12,9 @@ app.use(cors());
 app.use(express.json());
 
 const mapsDir = path.join(__dirname, 'maps');
+if (!fs.existsSync(mapsDir)) {
+    fs.mkdirSync(mapsDir, { recursive: true });
+}
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -133,6 +136,6 @@ app.get('/api/maps', (req, res) => {
     });
 });
 
-app.listen(port, () => {
-    console.log(`Node.js server listening at http://localhost:${port}`);
+app.listen(port, '0.0.0.0', () => {
+    console.log(`Node.js server listening at http://0.0.0.0:${port}`);
 });

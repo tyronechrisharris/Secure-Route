@@ -279,7 +279,7 @@ window.switchView = function(view) {
 };
 
 // Map Management Logic
-const nodeApi = 'http://localhost:3000/api';
+const nodeApi = `http://${window.location.hostname}:3000/api`;
 
 async function loadMapList() {
     try {
