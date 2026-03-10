@@ -94,7 +94,12 @@ public class MapController {
     public ResponseEntity<?> getMapBounds() {
         com.graphhopper.util.shapes.BBox bounds = graphHopperManager.getMapBounds();
         if (bounds != null) {
-            return new ResponseEntity<>(bounds, HttpStatus.OK);
+            java.util.Map<String, Double> boundsMap = new java.util.HashMap<>();
+            boundsMap.put("minLat", bounds.minLat);
+            boundsMap.put("minLon", bounds.minLon);
+            boundsMap.put("maxLat", bounds.maxLat);
+            boundsMap.put("maxLon", bounds.maxLon);
+            return new ResponseEntity<>(boundsMap, HttpStatus.OK);
         }
         return new ResponseEntity<>("Bounds not available", HttpStatus.NOT_FOUND);
     }
