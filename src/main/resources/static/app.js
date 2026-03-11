@@ -279,11 +279,11 @@ window.switchView = function(view) {
 };
 
 // Map Management Logic
-const nodeApi = `http://${window.location.hostname}:3000/api`;
+const mngApi = '/api/data-mgmt';
 
 async function loadMapList() {
     try {
-        const response = await fetch(`${nodeApi}/maps`);
+        const response = await fetch(`${mngApi}/list`);
         const maps = await response.json();
         const select = document.getElementById('cache-select');
         select.innerHTML = '<option value="">Select a cached file...</option>';
@@ -327,9 +327,10 @@ window.handleFileUpload = async function(file) {
     progressBar.style.width = '0%';
 
     try {
-        const response = await fetch(`${nodeApi}/map/upload`, {
+        const response = await fetch(`${mngApi}/upload-pbf`, {
             method: 'POST',
-            body: formData
+            body: formData,
+            headers: { 'Accept': 'application/json' }
         });
 
         if (response.ok) {
@@ -357,7 +358,7 @@ window.runTransform = function() {
     consoleEl.innerHTML = '';
     updateStatus('Transforming...', 'processing');
 
-    const eventSource = new EventSource(`${nodeApi}/map/transform?file=${file}`);
+    const eventSource = new EventSource(`${mngApi}/transform-pbf?file=${file}`);
 
     eventSource.onmessage = (event) => {
         const data = JSON.parse(event.data);
@@ -387,7 +388,7 @@ window.applyToMap = async function() {
     updateStatus('Applying Map...', 'processing');
 
     try {
-        const response = await fetch(`${nodeApi}/map/apply`, {
+        const response = await fetch(`${mngApi}/apply-pbf`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ file: file || 'map-data.osm.pbf' })
@@ -408,7 +409,7 @@ window.applyToMap = async function() {
 window.zoomToMap = async function() {
     updateStatus('Fetching Bounds...', 'processing');
     try {
-        const response = await fetch('/api/map-bounds');
+        const response = await fetch(`${mngApi}/get-map-bounds`);
         if (!response.ok) throw new Error("Bounds not available");
         const bounds = await response.json();
 

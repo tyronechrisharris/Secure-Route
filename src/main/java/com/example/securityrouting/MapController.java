@@ -2,18 +2,35 @@ package com.example.securityrouting;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/data-mgmt")
+@CrossOrigin(origins = "*")
 public class MapController {
 
     private final GraphHopperManager graphHopperManager;
@@ -23,75 +40,115 @@ public class MapController {
         this.graphHopperManager = graphHopperManager;
     }
 
-    @PostMapping("/upload-map")
-    public ResponseEntity<String> uploadMap(@RequestParam("file") MultipartFile file) {
+    @GetMapping("/list")
+    public ResponseEntity<List<String>> listMaps() {
+        System.out.println("[Java Mgmt] GET /api/data-mgmt/list");
+        File mapsDir = new File("maps");
+        if (!mapsDir.exists()) return ResponseEntity.ok(Collections.emptyList());
+        String[] files = mapsDir.list((dir, name) -> name.endsWith(".osm") || name.endsWith(".pbf") || name.endsWith(".bz2"));
+        return ResponseEntity.ok(files != null ? Arrays.asList(files) : Collections.emptyList());
+    }
+
+    @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Map<String, String>> uploadMap(@RequestParam("file") MultipartFile file) {
+        System.out.println("[Java Mgmt] POST /api/data-mgmt/upload - " + file.getOriginalFilename());
         if (file.isEmpty()) {
-            return new ResponseEntity<>("Please select a file to upload.", HttpStatus.BAD_REQUEST);
+            return ResponseEntity.badRequest().body(Collections.singletonMap("error", "Please select a file to upload."));
         }
 
         String originalFilename = file.getOriginalFilename();
         if (originalFilename == null) {
-            return new ResponseEntity<>("Invalid file name.", HttpStatus.BAD_REQUEST);
+            return ResponseEntity.badRequest().body(Collections.singletonMap("error", "Invalid file name."));
         }
 
-        boolean isBz2 = originalFilename.endsWith(".osm.bz2");
-        boolean isOsm = originalFilename.endsWith(".osm");
-        boolean isPbf = originalFilename.endsWith(".osm.pbf");
-
-        if (!isBz2 && !isOsm && !isPbf) {
-            return new ResponseEntity<>("Only .osm, .osm.bz2, and .osm.pbf files are supported.", HttpStatus.BAD_REQUEST);
+        if (!originalFilename.endsWith(".osm") && !originalFilename.endsWith(".pbf") && !originalFilename.endsWith(".bz2")) {
+            return ResponseEntity.badRequest().body(Collections.singletonMap("error", "Only .osm, .bz2, and .pbf files are supported."));
         }
 
         try {
-            // Delete existing map files to ensure we use the new one
-            File pbfFile = new File("map-data.osm.pbf");
-            File bz2File = new File("map-data.osm.bz2");
-            File osmFile = new File("map-data.osm");
+            File mapsDir = new File("maps");
+            if (!mapsDir.exists()) mapsDir.mkdirs();
 
-            if (pbfFile.exists()) pbfFile.delete();
-            if (bz2File.exists()) bz2File.delete();
-            if (osmFile.exists()) osmFile.delete();
-
-            // Save new file
-            String targetFileName = isPbf ? "map-data.osm.pbf" : (isBz2 ? "map-data.osm.bz2" : "map-data.osm");
-            File targetFile = new File(targetFileName);
+            File targetFile = new File(mapsDir, originalFilename);
 
             try (InputStream is = file.getInputStream();
                  OutputStream os = new FileOutputStream(targetFile)) {
 
-                byte[] buffer = new byte[1024];
+                byte[] buffer = new byte[8192];
                 int bytesRead;
                 while ((bytesRead = is.read(buffer)) != -1) {
                     os.write(buffer, 0, bytesRead);
                 }
             }
 
-            System.out.println("Map uploaded successfully: " + targetFileName);
-
-            // Reload GraphHopper with the new map data
-            graphHopperManager.reloadGraphHopper();
-
-            return new ResponseEntity<>("Successfully uploaded and applied " + originalFilename, HttpStatus.OK);
+            return ResponseEntity.ok(Collections.singletonMap("message", "Successfully uploaded " + originalFilename + " to cache."));
 
         } catch (IOException e) {
             e.printStackTrace();
-            return new ResponseEntity<>("Failed to process uploaded file: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+            return ResponseEntity.internalServerError().body(Collections.singletonMap("error", "Failed to upload file: " + e.getMessage()));
         }
     }
 
-    @PostMapping("/reload-map")
-    public ResponseEntity<String> reloadMap() {
+    @GetMapping(value = "/transform", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public StreamingResponseBody transformMap(@RequestParam("file") String file) {
+        System.out.println("[Java Mgmt] GET /api/data-mgmt/transform - " + file);
+        return outputStream -> {
+            try {
+                HttpClient client = HttpClient.newHttpClient();
+                String encodedFile = URLEncoder.encode(file, StandardCharsets.UTF_8);
+                // Using port 10099 for sidecar
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create("http://localhost:10099/api/sidecar/transform?file=" + encodedFile))
+                        .build();
+
+                HttpResponse<InputStream> response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
+                try (InputStream is = response.body()) {
+                    is.transferTo(outputStream);
+                }
+            } catch (Exception e) {
+                String errorMsg = "data: {\"status\":\"error\",\"message\":\"" + e.getMessage().replace("\"", "\\\"") + "\"}\n\n";
+                outputStream.write(errorMsg.getBytes(StandardCharsets.UTF_8));
+            }
+        };
+    }
+
+    @PostMapping(value = "/apply", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Map<String, String>> applyMap(@RequestBody Map<String, String> body) {
+        String fileName = body.get("file");
+        System.out.println("[Java Mgmt] POST /api/data-mgmt/apply - " + fileName);
+        try {
+            if (fileName != null && !fileName.equals("map-data.osm.pbf")) {
+                File source = new File("maps", fileName);
+                if (source.exists()) {
+                    Files.copy(source.toPath(), new File("map-data.osm.pbf").toPath(), StandardCopyOption.REPLACE_EXISTING);
+                } else {
+                    return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Collections.singletonMap("error", "Source file not found: " + fileName));
+                }
+            }
+
+            graphHopperManager.reloadGraphHopper();
+            return ResponseEntity.ok(Collections.singletonMap("message", "Successfully applied and reloaded map data"));
+        } catch (IOException e) {
+            e.printStackTrace();
+            return ResponseEntity.internalServerError().body(Collections.singletonMap("error", "Failed to apply map data: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping(value = "/reload-map-data", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<Map<String, String>> reloadMap() {
+        System.out.println("[Java Mgmt] POST /api/data-mgmt/reload");
         try {
             graphHopperManager.reloadGraphHopper();
-            return new ResponseEntity<>("Successfully reloaded map data", HttpStatus.OK);
+            return ResponseEntity.ok(Collections.singletonMap("message", "Successfully reloaded map data"));
         } catch (IOException e) {
             e.printStackTrace();
-            return new ResponseEntity<>("Failed to reload map data: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+            return ResponseEntity.internalServerError().body(Collections.singletonMap("error", "Failed to reload map data: " + e.getMessage()));
         }
     }
 
-    @GetMapping("/map-bounds")
+    @GetMapping(value = "/bounds", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> getMapBounds() {
+        System.out.println("[Java Mgmt] GET /api/data-mgmt/bounds");
         com.graphhopper.util.shapes.BBox bounds = graphHopperManager.getMapBounds();
         if (bounds != null) {
             java.util.Map<String, Double> boundsMap = new java.util.HashMap<>();
@@ -99,8 +156,14 @@ public class MapController {
             boundsMap.put("minLon", bounds.minLon);
             boundsMap.put("maxLat", bounds.maxLat);
             boundsMap.put("maxLon", bounds.maxLon);
-            return new ResponseEntity<>(boundsMap, HttpStatus.OK);
+            return ResponseEntity.ok(boundsMap);
         }
-        return new ResponseEntity<>("Bounds not available", HttpStatus.NOT_FOUND);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Collections.singletonMap("error", "Bounds not available"));
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<Map<String, String>> handle405(HttpRequestMethodNotSupportedException e) {
+        System.err.println("[Java Mgmt] 405 Method Not Allowed: " + e.getMessage());
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(Collections.singletonMap("error", "JAVA_MGMT_405: " + e.getMessage()));
     }
 }
