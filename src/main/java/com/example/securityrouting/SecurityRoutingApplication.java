@@ -20,7 +20,6 @@ public class SecurityRoutingApplication implements CommandLineRunner {
     public void run(String... args) throws Exception {
         System.out.println("Starting Node.js sidecar server...");
 
-        // Ensure we are in the right directory or provide full path if necessary
         ProcessBuilder builder = new ProcessBuilder("node", "server.js");
         builder.redirectErrorStream(true);
         Process process = builder.start();
