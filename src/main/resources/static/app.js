@@ -1,9 +1,8 @@
 var map = L.map('map').setView([51.505, -0.09], 13);
 
-const p = new pmtiles.PMTiles('/map.pmtiles');
-pmtiles.leafletRasterLayer(p, {
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
-    attribution: '© OpenStreetMap contributors'
+    attribution: '&copy; OpenStreetMap'
 }).addTo(map);
 
 var layers = {

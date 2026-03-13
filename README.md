@@ -1,31 +1,42 @@
-# Secure-Route (Rust Re-Write)
+# Security Routing Application
 
-A highly performant, memory-safe, purely offline routing engine natively built in Rust, replacing the legacy Java backend.
+An offline-first, high-security transport routing application using Spring Boot and GraphHopper.
 
 ## Features
-- **Zero-Copy Graph Serialization:** Processes large `.osm.pbf` files directly into a memory-mapped `rkyv` `.graph` file to load into RAM in less than a few milliseconds.
-- **Parallel Parsing:** Utilizes `osmpbfreader` and `rayon` to digest planet-scale graphs effortlessly.
-- **Fast Routing:** Implements Dijkstra / Contraction Hierarchies compatible routing logic mimicking GraphHopper 9.0's CustomModel.
-- **Offline PMTiles Map Rendering:** Connects via Axum.
-- **Air-Gapped Embedded UI:** Frontend built into the binary using `rust-embed`.
 
-## Build Instructions
-1. Ensure Rust is installed.
-2. Clone repository.
-3. Run `cargo build --release`
+*   **Offline Routing:** Uses GraphHopper with OSM data.
+*   **Security Weighting:** Avoids choke points (bridges, tunnels) and high-threat areas.
+*   **Asset Management:** Visualizes Police, EMS, Military, and Safe Havens.
+*   **Live Traffic:** Simulates live traffic updates to adjust routing dynamically.
+*   **Frontend:** Leaflet.js based dashboard for route planning and assessment.
 
-## Usage
-### Step 1: Ingesting PBF (Build Mode)
-```bash
-./secure-route build --pbf data/rhode-island.osm.pbf --out rhode-island.graph
-```
+## Setup
 
-### Step 2: Serving App & Routing (Serve Mode)
-```bash
-./secure-route serve --graph rhode-island.graph --tiles map.pmtiles --bind 0.0.0.0:8080
-```
-Open `http://localhost:8080`.
+1.  **Build:** `mvn clean package`
+2.  **Run:** `java -jar target/security-routing-0.0.1-SNAPSHOT.jar`
+3.  **Access:** Open `http://localhost:8080`
 
-## Testing and Benchmarks
-Run `cargo test` for unit logic tests.
-Run `cargo bench` to benchmark routing algorithms to trace and avoid performance regressions using `criterion`.
+## Configuration
+
+*   **OSM Data:** Please rename your OSM compliant map data file to either `map-data.osm.bz2` (for compressed files) or `map-data.osm` (for uncompressed files) and place it in the root directory.
+*   **Threat Data:** Place `threats.geojson` in the root directory.
+
+## API Endpoints
+
+*   `POST /api/secure-route`: Calculate route.
+*   `GET /api/security-assets`: Get all security assets.
+
+## Releases (Windows & Mac)
+
+A universal release package is available.
+
+1.  Download `security-routing-release.zip`.
+2.  Extract the contents.
+3.  **Windows:** Double-click `run-windows.bat`.
+4.  **Mac/Linux:** Open a terminal, navigate to the folder, and run `./run-mac.sh`.
+
+*Note: Java 17+ must be installed on your system.*
+
+## Troubleshooting
+
+If routing fails, ensure the OSM file covers the requested coordinates.

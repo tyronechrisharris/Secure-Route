@@ -4,8 +4,3 @@ graph-cache/
 *.bz2
 node_modules/
 maps/
-
-
-# Added by cargo
-
-/target
