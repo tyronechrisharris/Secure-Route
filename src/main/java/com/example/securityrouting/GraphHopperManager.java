@@ -80,6 +80,13 @@ public class GraphHopperManager {
         return graphHopper;
     }
 
+    public com.graphhopper.util.shapes.BBox getMapBounds() {
+        if (graphHopper != null && graphHopper.getBaseGraph() != null) {
+            return graphHopper.getBaseGraph().getBounds();
+        }
+        return null;
+    }
+
     public synchronized void reloadGraphHopper() throws IOException {
         System.out.println("Reloading GraphHopper map data...");
         if (graphHopper != null) {

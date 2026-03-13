@@ -2,3 +2,5 @@ target/
 graph-cache/
 *.log
 *.bz2
+node_modules/
+maps/

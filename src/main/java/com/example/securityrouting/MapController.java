@@ -2,18 +2,30 @@ package com.example.securityrouting;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.util.*;
 
 @RestController
 @RequestMapping("/api")
+@CrossOrigin(origins = "*")
 public class MapController {
 
     private final GraphHopperManager graphHopperManager;
@@ -21,6 +33,14 @@ public class MapController {
     @Autowired
     public MapController(GraphHopperManager graphHopperManager) {
         this.graphHopperManager = graphHopperManager;
+    }
+
+    @GetMapping("/maps")
+    public ResponseEntity<List<String>> listMaps() {
+        File mapsDir = new File("maps");
+        if (!mapsDir.exists()) mapsDir.mkdirs();
+        String[] files = mapsDir.list((dir, name) -> name.endsWith(".osm") || name.endsWith(".pbf") || name.endsWith(".bz2"));
+        return ResponseEntity.ok(files != null ? Arrays.asList(files) : Collections.emptyList());
     }
 
     @PostMapping("/upload-map")
@@ -34,48 +54,90 @@ public class MapController {
             return new ResponseEntity<>("Invalid file name.", HttpStatus.BAD_REQUEST);
         }
 
-        boolean isBz2 = originalFilename.endsWith(".osm.bz2");
-        boolean isOsm = originalFilename.endsWith(".osm");
-        boolean isPbf = originalFilename.endsWith(".osm.pbf");
-
-        if (!isBz2 && !isOsm && !isPbf) {
-            return new ResponseEntity<>("Only .osm, .osm.bz2, and .osm.pbf files are supported.", HttpStatus.BAD_REQUEST);
+        if (!originalFilename.endsWith(".osm") && !originalFilename.endsWith(".pbf") && !originalFilename.endsWith(".bz2")) {
+            return new ResponseEntity<>("Only .osm, .bz2, and .pbf files are supported.", HttpStatus.BAD_REQUEST);
         }
 
         try {
-            // Delete existing map files to ensure we use the new one
-            File pbfFile = new File("map-data.osm.pbf");
-            File bz2File = new File("map-data.osm.bz2");
-            File osmFile = new File("map-data.osm");
+            File mapsDir = new File("maps");
+            if (!mapsDir.exists()) mapsDir.mkdirs();
 
-            if (pbfFile.exists()) pbfFile.delete();
-            if (bz2File.exists()) bz2File.delete();
-            if (osmFile.exists()) osmFile.delete();
-
-            // Save new file
-            String targetFileName = isPbf ? "map-data.osm.pbf" : (isBz2 ? "map-data.osm.bz2" : "map-data.osm");
-            File targetFile = new File(targetFileName);
-
+            File targetFile = new File(mapsDir, originalFilename);
             try (InputStream is = file.getInputStream();
                  OutputStream os = new FileOutputStream(targetFile)) {
-
-                byte[] buffer = new byte[1024];
+                byte[] buffer = new byte[8192];
                 int bytesRead;
                 while ((bytesRead = is.read(buffer)) != -1) {
                     os.write(buffer, 0, bytesRead);
                 }
             }
 
-            System.out.println("Map uploaded successfully: " + targetFileName);
-
-            // Reload GraphHopper with the new map data
-            graphHopperManager.reloadGraphHopper();
-
-            return new ResponseEntity<>("Successfully uploaded and applied " + originalFilename, HttpStatus.OK);
-
+            return new ResponseEntity<>("Successfully uploaded " + originalFilename + " to server cache.", HttpStatus.OK);
         } catch (IOException e) {
             e.printStackTrace();
-            return new ResponseEntity<>("Failed to process uploaded file: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+            return new ResponseEntity<>("Failed to upload file: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
         }
+    }
+
+    @GetMapping(value = "/map/transform", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public StreamingResponseBody transformMap(@RequestParam("file") String file) {
+        return outputStream -> {
+            try {
+                HttpClient client = HttpClient.newHttpClient();
+                String encodedFile = URLEncoder.encode(file, StandardCharsets.UTF_8);
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create("http://127.0.0.1:10080/api/sidecar/transform?file=" + encodedFile))
+                        .build();
+
+                HttpResponse<InputStream> response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
+                try (InputStream is = response.body()) {
+                    is.transferTo(outputStream);
+                }
+            } catch (Exception e) {
+                outputStream.write(("data: " + "{\"status\":\"error\",\"message\":\"" + e.getMessage() + "\"}\n\n").getBytes());
+            }
+        };
+    }
+
+    @PostMapping("/map/apply")
+    public ResponseEntity<String> applyMap(@RequestBody Map<String, String> body) {
+        String fileName = body.get("file");
+        try {
+            if (fileName != null && !fileName.isEmpty()) {
+                File source = new File("maps", fileName);
+                if (source.exists()) {
+                    Files.copy(source.toPath(), new File("map-data.osm.pbf").toPath(), StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+            graphHopperManager.reloadGraphHopper();
+            return ResponseEntity.ok("Successfully applied and reloaded map data");
+        } catch (IOException e) {
+            return new ResponseEntity<>("Failed to apply map: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @PostMapping("/reload-map")
+    public ResponseEntity<String> reloadMap() {
+        try {
+            graphHopperManager.reloadGraphHopper();
+            return new ResponseEntity<>("Successfully reloaded map data", HttpStatus.OK);
+        } catch (IOException e) {
+            e.printStackTrace();
+            return new ResponseEntity<>("Failed to reload map data: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    @GetMapping("/map-bounds")
+    public ResponseEntity<?> getMapBounds() {
+        com.graphhopper.util.shapes.BBox bounds = graphHopperManager.getMapBounds();
+        if (bounds != null) {
+            java.util.Map<String, Double> boundsMap = new java.util.HashMap<>();
+            boundsMap.put("minLat", bounds.minLat);
+            boundsMap.put("minLon", bounds.minLon);
+            boundsMap.put("maxLat", bounds.maxLat);
+            boundsMap.put("maxLon", bounds.maxLon);
+            return new ResponseEntity<>(boundsMap, HttpStatus.OK);
+        }
+        return new ResponseEntity<>("Bounds not available", HttpStatus.NOT_FOUND);
     }
 }
