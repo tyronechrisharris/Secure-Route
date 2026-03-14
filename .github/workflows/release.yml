@@ -21,7 +21,7 @@ jobs:
             asset_name: secure-route-linux-amd64
           - os: macos-latest
             artifact_name: secure-route-mac
-            asset_name: secure-route-macos-amd64
+            asset_name: secure-route-macos-arm64
           - os: windows-latest
             artifact_name: secure-route.exe
             asset_name: secure-route-windows-amd64.exe
