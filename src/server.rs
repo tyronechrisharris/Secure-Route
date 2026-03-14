@@ -73,7 +73,7 @@ pub async fn run_server(graph_path: String, pmtiles_path: String, bind: String) 
         .route("/api/security-assets", get(get_assets))
         .route("/api/secure-route", post(calculate_route))
         .route("/map.pmtiles", axum::routing::get_service(serve_pmtiles))
-        .route("/*file", get(static_handler))
+        .route("/{*file}", get(static_handler))
         .with_state(state);
 
     println!("Listening on http://{}", bind);
