@@ -58,3 +58,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ matrix.asset_name }}
+          tag_name: ${{ github.event.release.tag_name || format('manual-{0}', github.run_id) }}
