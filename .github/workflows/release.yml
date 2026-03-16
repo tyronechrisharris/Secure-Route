@@ -10,21 +10,31 @@ permissions:
 
 jobs:
   test_and_build:
-    name: Build on ${{ matrix.os }}
+    name: Build on ${{ matrix.asset_name }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
         include:
+          # Target 1: Linux
           - os: ubuntu-latest
             artifact_name: secure-route-linux
             asset_name: secure-route-linux-amd64
+            rustflags: ''
+          # Target 2: Generic Mac (M1/M2/M3 compatible)
           - os: macos-latest
             artifact_name: secure-route-mac
             asset_name: secure-route-macos-arm64
+            rustflags: ''
+          # Target 3: Optimized Mac M4 Max
+          - os: macos-latest
+            artifact_name: secure-route-mac-m4
+            asset_name: secure-route-macos-m4-max
+            rustflags: '-C target-cpu=apple-m4'
+          # Target 4: Windows
           - os: windows-latest
             artifact_name: secure-route.exe
             asset_name: secure-route-windows-amd64.exe
+            rustflags: ''
 
     steps:
       - name: Checkout repository
@@ -46,7 +56,7 @@ jobs:
       - name: Build release binary
         run: cargo build --release
         env:
-          RUSTFLAGS: ${{ matrix.os == 'macos-latest' && '-C target-cpu=native' || '' }}
+          RUSTFLAGS: ${{ matrix.rustflags }}
 
       - name: Rename and Prepare Asset (Linux/Mac)
         if: matrix.os != 'windows-latest'
