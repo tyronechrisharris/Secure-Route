@@ -45,6 +45,8 @@ jobs:
 
       - name: Build release binary
         run: cargo build --release
+        env:
+          RUSTFLAGS: ${{ matrix.os == 'macos-latest' && '-C target-cpu=native' || '' }}
 
       - name: Rename and Prepare Asset (Linux/Mac)
         if: matrix.os != 'windows-latest'

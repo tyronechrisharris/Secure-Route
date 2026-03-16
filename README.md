@@ -14,6 +14,12 @@ A highly performant, memory-safe, purely offline routing engine natively built i
 2. Clone repository.
 3. Run `cargo build --release`
 
+### Optimized Build (Apple Silicon / M4 Max)
+To fully exploit the Unified Memory Architecture and ARM64 instructions:
+```bash
+RUSTFLAGS="-C target-cpu=native" cargo build --release
+```
+
 ## Usage
 ### Step 1: Ingesting PBF (Build Mode)
 ```bash
