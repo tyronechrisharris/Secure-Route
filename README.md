@@ -3,7 +3,7 @@
 A highly performant, memory-safe, purely offline routing engine natively built in Rust, replacing the legacy Java backend.
 
 ## Features
-- **Zero-Copy Graph Serialization:** Processes large `.osm.pbf` files directly into a memory-mapped `rkyv` `.graph` file to load into RAM in less than a few milliseconds.
+- **Fast Graph Serialization:** Processes massive `.osm.pbf` files and serializes the Contraction Hierarchies routing graph using bincode into a `.graph` file, allowing initialization in milliseconds.
 - **Parallel Parsing:** Utilizes `osmpbfreader` and `rayon` to digest planet-scale graphs effortlessly.
 - **Fast Routing:** Implements Dijkstra / Contraction Hierarchies compatible routing logic mimicking GraphHopper 9.0's CustomModel.
 - **Offline PMTiles Map Rendering:** Connects via Axum.
