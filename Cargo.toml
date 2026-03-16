@@ -23,3 +23,8 @@ serde = { version = "1.0.228", features = ["derive"] }
 tokio = { version = "1.50.0", features = ["full"] }
 tower = "0.5.3"
 tower-http = { version = "0.6.8", features = ["fs"] }
+
+# High-Performance Additions for M4 Max Architecture
+mimalloc = "0.1"
+rayon = "1.10"
+memmap2 = "0.9"

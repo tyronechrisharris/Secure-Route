@@ -6,6 +6,12 @@ pub mod cli;
 
 use clap::Parser;
 use cli::{Cli, Commands};
+use mimalloc::MiMalloc;
+
+// Overrides the default system allocator with Microsoft's lock-free allocator
+// This prevents severe thread contention when parsing millions of OSM objects across all cores.
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 #[tokio::main]
 async fn main() {
