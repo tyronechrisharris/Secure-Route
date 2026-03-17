@@ -2,7 +2,7 @@ use axum::{
     extract::{Path, State, Json},
     http::{header, StatusCode, Uri},
     response::IntoResponse,
-    routing::{get, post, put, delete},
+    routing::{get, post, put},
     Router,
 };
 use redb::ReadableTable;
@@ -12,7 +12,7 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::services::ServeFile;
 use crate::graph::{GraphData, SecurityAsset};
-use geo::{Polygon, Point, Coord, EuclideanDistance};
+use geo::{Polygon, Point, Coord};
 use geo::Intersects;
 
 pub const SECURITY_ASSETS: redb::TableDefinition<u64, &[u8]> = redb::TableDefinition::new("security_assets");
@@ -281,24 +281,30 @@ async fn calculate_route(
                     if let Ok(Some(bytes)) = adj_table.get(u) {
                         let edges: Vec<(u64, f64)> = bincode::deserialize(bytes.value()).unwrap();
                         for (v, weight) in edges {
-                            let mut cost = weight;
                             let v_info = &state.graph_data.nodes[v as usize];
                             let pt = Point::new(v_info.lon, v_info.lat);
 
+                            // 1. Check active barriers
+                            let mut is_blocked = false;
                             for barrier in &active_barriers {
                                 if barrier.polygon.intersects(&pt) {
-                                    cost = f64::INFINITY;
+                                    is_blocked = true;
                                     break;
                                 }
                             }
 
-                            if cost != f64::INFINITY {
-                                for asset_pt in &asset_points {
-                                    let dist = pt.euclidean_distance(asset_pt);
-                                    if dist < 0.05 { // ~5km roughly
-                                        cost *= 0.5;
-                                        break;
-                                    }
+                            // SAFEGUARD: If blocked, skip this road entirely. Do not push to neighbors.
+                            if is_blocked {
+                                continue;
+                            }
+
+                            // 2. Asset Overwatch Discount
+                            let mut cost = weight;
+                            for asset_pt in &asset_points {
+                                let dist = ((pt.x() - asset_pt.x()).powi(2) + (pt.y() - asset_pt.y()).powi(2)).sqrt();
+                                if dist < 0.05 { // ~5km roughly
+                                    cost *= 0.5;
+                                    break;
                                 }
                             }
                             neighbors.push((v, cost as usize));
@@ -309,7 +315,8 @@ async fn calculate_route(
                 |&u| {
                     let u_info = &state.graph_data.nodes[u as usize];
                     let end_info = &state.graph_data.nodes[end_node];
-                    ((u_info.lat - end_info.lat).powi(2) + (u_info.lon - end_info.lon).powi(2)).sqrt() as usize
+                    // Using the new, time-based heuristic
+                    heuristic_time_ms(u_info.lat, u_info.lon, end_info.lat, end_info.lon)
                 },
                 |&u| u == (end_node as u64),
             );
@@ -412,4 +419,17 @@ fn find_nearest_node(nodes: &Vec<crate::graph::NodeInfo>, lat: f64, lon: f64) ->
     }
 
     best_id
+}
+
+fn heuristic_time_ms(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> usize {
+    let r = 6371000.0; // Earth radius in meters
+    let d_lat = (lat2 - lat1).to_radians();
+    let d_lon = (lon2 - lon1).to_radians();
+    let a = (d_lat / 2.0).sin().powi(2) +
+            lat1.to_radians().cos() * lat2.to_radians().cos() * (d_lon / 2.0).sin().powi(2);
+    let distance_meters = r * 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
+
+    // Max straight-line speed of 120 km/h (33.33 meters/second) to remain admissible
+    let time_seconds = distance_meters / 33.33;
+    (time_seconds * 1000.0) as usize
 }

@@ -6,7 +6,6 @@ use rayon::prelude::*;
 use redb::{Database, ReadableTable, TableDefinition, ReadableTableMetadata, ReadOnlyTable};
 use std::fs::File;
 use std::io::{Cursor, Write};
-use std::sync::Mutex;
 
 // redb Table Definitions
 const ROUTABLE_NODES: TableDefinition<i64, ()> = TableDefinition::new("routable_nodes");
