@@ -35,10 +35,11 @@ def verify():
     # Verify routing endpoint
     print("\nVerifying /api/secure-route...")
     payload = {
-        "startLat": 51.5074,
-        "startLon": -0.1278,
-        "endLat": 51.5150,
-        "endLon": -0.1100,
+        "route_points": [
+            [51.5074, -0.1278],
+            [51.5150, -0.1100]
+        ],
+        "threat_polygons": [],
         "threatLevel": "LOW",
         "vehicleProfile": "security_car"
     }
@@ -56,6 +57,7 @@ def verify():
                      print("Routing endpoint working: OK")
                      print(f"Distance: {data['distance']} meters")
                      print(f"Time: {data['time']} ms")
+                     print(f"Threat Intersected: {data.get('threat_intersected')}")
                 else:
                      print(f"Routing endpoint response invalid: {data}")
             else:
