@@ -171,16 +171,94 @@ window.deleteThreat = function(id) {
     }
 };
 
+let assetMarkers = {};
+
+window.createAssetMarker = function(asset) {
+    if (!layers[asset.type]) return;
+
+    const marker = L.marker([asset.lat, asset.lon], {icon: icons[asset.type]});
+    assetMarkers[asset.id] = marker;
+
+    const popupContent = `
+        <b>${asset.name}</b><br>${asset.type}<br><br>
+        <button onclick="editAsset(${asset.id})" style="background: #f39c12; margin-bottom: 5px; width: 100%;">Edit</button><br>
+        <button onclick="deleteAsset(${asset.id})" style="background: #e74c3c; width: 100%;">Delete</button>
+    `;
+
+    marker.bindPopup(popupContent).addTo(layers[asset.type]);
+};
+
+window.editAsset = function(id) {
+    const marker = assetMarkers[id];
+    if (!marker) return;
+
+    let newName = prompt("Enter New Name:");
+    if (!newName) return;
+
+    let newType = prompt("Enter New Type (POLICE, EMS, MILITARY, SAFE_HAVEN):");
+    if (!newType) return;
+    newType = newType.toUpperCase();
+
+    if (!icons[newType]) {
+        alert("Invalid Asset Type!");
+        return;
+    }
+
+    const latlng = marker.getLatLng();
+    const asset = {
+        id: id,
+        name: newName,
+        type: newType,
+        lat: latlng.lat,
+        lon: latlng.lng,
+        operational: true
+    };
+
+    fetch(`/api/security-assets/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(asset)
+    })
+    .then(response => {
+        if (response.ok) {
+            // Remove old marker and add new one to reflect changes
+            map.removeLayer(marker);
+            for (let l in layers) {
+                if (layers[l].hasLayer(marker)) layers[l].removeLayer(marker);
+            }
+            createAssetMarker(asset);
+        }
+    })
+    .catch(err => console.error("Failed to update asset:", err));
+};
+
+window.deleteAsset = function(id) {
+    if (!confirm("Delete this security asset?")) return;
+
+    fetch(`/api/security-assets/${id}`, {
+        method: 'DELETE'
+    })
+    .then(response => {
+        if (response.ok) {
+            const marker = assetMarkers[id];
+            if (marker) {
+                map.removeLayer(marker);
+                for (let l in layers) {
+                    if (layers[l].hasLayer(marker)) layers[l].removeLayer(marker);
+                }
+                delete assetMarkers[id];
+            }
+        }
+    })
+    .catch(err => console.error("Failed to delete asset:", err));
+};
+
 // Load assets
 fetch('/api/security-assets')
     .then(response => response.json())
     .then(data => {
         data.forEach(asset => {
-            if (layers[asset.type]) {
-                L.marker([asset.lat, asset.lon], {icon: icons[asset.type]})
-                    .bindPopup(`<b>${asset.name}</b><br>${asset.type}`)
-                    .addTo(layers[asset.type]);
-            }
+            createAssetMarker(asset);
         });
     })
     .catch(err => console.error("Failed to load assets:", err));
@@ -234,6 +312,7 @@ map.on('click', function(e) {
             <p style="margin: 0 0 10px 0;"><strong>Set Location</strong></p>
             <button onclick="setPoint('start', ${lat}, ${lng})" style="margin-bottom: 5px; width: 100%; cursor: pointer;">Set Start Point</button><br>
             <button onclick="setPoint('end', ${lat}, ${lng})" style="margin-bottom: 5px; width: 100%; cursor: pointer;">Set End Point</button><br>
+            <button onclick="startCreatingAsset(${lat}, ${lng})" style="margin-bottom: 5px; width: 100%; cursor: pointer; background: #3498db;">Add Security Asset</button><br>
             <button onclick="startDrawingThreat()" style="width: 100%; cursor: pointer; background: #e74c3c;">Create Threat Area</button>
         </div>
     `;
@@ -251,6 +330,41 @@ window.startDrawingThreat = function() {
         snappable: true,
         snapDistance: 20,
     });
+};
+
+window.startCreatingAsset = function(lat, lng) {
+    let name = prompt("Enter Asset Name:", "New Asset");
+    if (!name) return;
+
+    let type = prompt("Enter Asset Type (POLICE, EMS, MILITARY, SAFE_HAVEN):", "POLICE");
+    if (!type) return;
+    type = type.toUpperCase();
+
+    if (!icons[type]) {
+        alert("Invalid Asset Type!");
+        return;
+    }
+
+    const asset = {
+        id: 0, // Backend will assign
+        name: name,
+        type: type,
+        lat: parseFloat(lat),
+        lon: parseFloat(lng),
+        operational: true
+    };
+
+    fetch('/api/security-assets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(asset)
+    })
+    .then(response => response.json())
+    .then(savedAsset => {
+        createAssetMarker(savedAsset);
+        map.closePopup();
+    })
+    .catch(err => console.error("Failed to save asset:", err));
 };
 
 // Expose setPoint globally so popup buttons can call it
