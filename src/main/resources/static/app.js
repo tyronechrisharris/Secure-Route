@@ -1,7 +1,9 @@
+const protocol = new pmtiles.Protocol();
+L.addProtocol('pmtiles', protocol.tile);
+
 var map = L.map('map').setView([51.505, -0.09], 13);
 
-const p = new pmtiles.PMTiles('/map.pmtiles');
-pmtiles.leafletRasterLayer(p, {
+L.tileLayer('pmtiles://localhost:8080/map.pmtiles', {
     maxZoom: 19,
     attribution: '© OpenStreetMap contributors'
 }).addTo(map);
@@ -60,6 +62,13 @@ fetch('/api/threats')
 
 
 map.on('pm:create', function(e) {
+    if (e.shape === 'Marker') {
+        const marker = e.layer;
+        extraWaypoints.push(marker);
+        marker.on('pm:remove', function() {
+            extraWaypoints = extraWaypoints.filter(m => m !== marker);
+        });
+    }
     if (e.shape === 'Polygon' || e.shape === 'Rectangle') {
         const layer = e.layer;
 
@@ -176,6 +185,7 @@ function toggleLayer(type) {
 }
 
 // Global markers for start and end
+let extraWaypoints = [];
 let startMarker = L.marker([document.getElementById('startLat').value || 51.5074, document.getElementById('startLon').value || -0.1278], {
     draggable: true,
     icon: L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png', iconSize: [25, 41], iconAnchor: [12, 41]})
@@ -431,17 +441,35 @@ function updateStatus(text, type) {
 }
 
 function calculateRoute() {
-    var startLat = parseFloat(document.getElementById('startLat').value);
-    var startLon = parseFloat(document.getElementById('startLon').value);
-    var endLat = parseFloat(document.getElementById('endLat').value);
-    var endLon = parseFloat(document.getElementById('endLon').value);
     var threatLevel = document.getElementById('threatLevel').value;
 
+    let points = [];
+    points.push([startMarker.getLatLng().lat, startMarker.getLatLng().lng]);
+    extraWaypoints.forEach(m => {
+        points.push([m.getLatLng().lat, m.getLatLng().lng]);
+    });
+    points.push([endMarker.getLatLng().lat, endMarker.getLatLng().lng]);
+
+    let threat_polygons = [];
+    layers['THREATS'].eachLayer(layer => {
+        if (layer instanceof L.Polygon) {
+            let latlngs = layer.getLatLngs();
+            // Leaflet polygons can be nested arrays
+            if (Array.isArray(latlngs[0]) && !(latlngs[0][0] instanceof L.LatLng)) {
+                // Multi-ring
+                let rings = latlngs.map(ring => ring.map(ll => [ll.lat, ll.lng]));
+                threat_polygons.push(rings);
+            } else {
+                // Single ring
+                let ring = latlngs.map(ll => [ll.lat, ll.lng]);
+                threat_polygons.push([ring]);
+            }
+        }
+    });
+
     var request = {
-        startLat: startLat,
-        startLon: startLon,
-        endLat: endLat,
-        endLon: endLon,
+        route_points: points,
+        threat_polygons: threat_polygons,
         threatLevel: threatLevel,
         vehicleProfile: "security_car"
     };
@@ -458,9 +486,15 @@ function calculateRoute() {
     .then(data => {
         layers['ROUTE'].clearLayers();
 
+        let routeStyle = { color: '#ff7800', weight: 5, opacity: 0.65 };
+        if (data.threat_intersected) {
+            routeStyle = { color: 'red', weight: 7, opacity: 0.8 };
+            window.alert("DANGER: This route crosses through a designated threat area!");
+        }
+
         // Draw Route
         L.geoJSON(data.geometry, {
-            style: { color: '#ff7800', weight: 5, opacity: 0.65 }
+            style: routeStyle
         }).addTo(layers['ROUTE']);
 
         map.fitBounds(L.geoJSON(data.geometry).getBounds(), {padding: [50, 50]});

@@ -11,6 +11,8 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::services::ServeFile;
 use crate::graph::{GraphData, SecurityAsset};
+use geo::{Polygon, Point, Coord};
+use geo::Intersects;
 
 #[derive(RustEmbed)]
 #[folder = "src/main/resources/static/"]
@@ -23,14 +25,10 @@ pub struct AppState {
 
 #[derive(Deserialize)]
 pub struct RouteRequest {
-    #[serde(rename = "startLat")]
-    pub start_lat: f64,
-    #[serde(rename = "startLon")]
-    pub start_lon: f64,
-    #[serde(rename = "endLat")]
-    pub end_lat: f64,
-    #[serde(rename = "endLon")]
-    pub end_lon: f64,
+    #[serde(rename = "route_points")]
+    pub route_points: Vec<[f64; 2]>,
+    #[serde(rename = "threat_polygons")]
+    pub threat_polygons: Vec<Vec<Vec<[f64; 2]>>>,
     #[serde(rename = "threatLevel")]
     pub threat_level: String,
 }
@@ -48,6 +46,8 @@ pub struct RouteResponse {
     pub eta_to_nearest_safe_haven: String,
     #[serde(rename = "intersectedThreats")]
     pub intersected_threats: Vec<String>,
+    #[serde(rename = "threat_intersected")]
+    pub threat_intersected: bool,
 }
 
 #[derive(Serialize)]
@@ -119,40 +119,99 @@ async fn calculate_route(
 ) -> Json<RouteResponse> {
 
     let router = crate::router::Router::new(&state.graph_data);
+    let mut full_path_ids = Vec::new();
+    let mut total_cost = 0.0;
 
-    let start_node = find_nearest_node(&state.graph_data.nodes, payload.start_lat, payload.start_lon);
-    let end_node = find_nearest_node(&state.graph_data.nodes, payload.end_lat, payload.end_lon);
+    for i in 0..payload.route_points.len() - 1 {
+        let start_pt = payload.route_points[i];
+        let end_pt = payload.route_points[i + 1];
 
-    let (path_ids, cost) = router.route(start_node, end_node, false, false).unwrap_or((vec![], 0.0));
+        let start_node = find_nearest_node(&state.graph_data.nodes, start_pt[0], start_pt[1]);
+        let end_node = find_nearest_node(&state.graph_data.nodes, end_pt[0], end_pt[1]);
+
+        if let Some((leg_path, leg_cost)) = router.route(start_node, end_node, false, false) {
+            if !leg_path.is_empty() {
+                if !full_path_ids.is_empty() {
+                    // Avoid duplicating the joint node
+                    full_path_ids.extend(leg_path.into_iter().skip(1));
+                } else {
+                    full_path_ids.extend(leg_path);
+                }
+                total_cost += leg_cost;
+            }
+        }
+    }
 
     let mut coords = Vec::new();
+    let mut threat_intersected = false;
 
-    if !path_ids.is_empty() {
+    // Convert payload polygons to geo::Polygon
+    let geo_polygons: Vec<Polygon<f64>> = payload.threat_polygons.iter().map(|poly_coords| {
+        let exterior_coords: Vec<Coord<f64>> = poly_coords[0].iter().map(|c| Coord { x: c[1], y: c[0] }).collect();
+        let interiors: Vec<geo::LineString<f64>> = poly_coords.iter().skip(1).map(|ring| {
+            ring.iter().map(|c| Coord { x: c[1], y: c[0] }).collect::<Vec<Coord<f64>>>().into()
+        }).collect();
+        Polygon::new(exterior_coords.into(), interiors)
+    }).collect();
+
+    if !full_path_ids.is_empty() {
         let read_txn = state.db.begin_read().expect("Failed to begin read transaction");
         let edge_geo_table = read_txn.open_table(crate::graph::EDGE_GEOMETRY).expect("Failed to open edge geometry table");
 
         // Add first node
-        let first_node = &state.graph_data.nodes[path_ids[0]];
-        coords.push(vec![first_node.lon, first_node.lat]);
+        let first_node = &state.graph_data.nodes[full_path_ids[0]];
+        let first_coord = vec![first_node.lon, first_node.lat];
+        coords.push(first_coord.clone());
 
-        for i in 0..path_ids.len() - 1 {
-            let u = path_ids[i] as u64;
-            let v = path_ids[i + 1] as u64;
+        // Check first node for threat
+        let pt = Point::new(first_coord[0], first_coord[1]);
+        for poly in &geo_polygons {
+            if poly.intersects(&pt) {
+                threat_intersected = true;
+                break;
+            }
+        }
+
+        for i in 0..full_path_ids.len() - 1 {
+            let u = full_path_ids[i] as u64;
+            let v = full_path_ids[i + 1] as u64;
 
             if let Ok(Some(geo_bytes)) = edge_geo_table.get((u, v)) {
                 let points: Vec<[f64; 2]> = bincode::deserialize(geo_bytes.value().as_slice()).unwrap();
                 for p in points {
-                    coords.push(vec![p[1], p[0]]); // Swap to [lon, lat]
+                    let c = vec![p[1], p[0]]; // Swap to [lon, lat]
+                    coords.push(c.clone());
+
+                    if !threat_intersected {
+                        let pt = Point::new(c[0], c[1]);
+                        for poly in &geo_polygons {
+                            if poly.intersects(&pt) {
+                                threat_intersected = true;
+                                break;
+                            }
+                        }
+                    }
                 }
             }
 
-            let next_node = &state.graph_data.nodes[path_ids[i + 1]];
-            coords.push(vec![next_node.lon, next_node.lat]);
+            let next_node = &state.graph_data.nodes[full_path_ids[i + 1]];
+            let next_coord = vec![next_node.lon, next_node.lat];
+            coords.push(next_coord.clone());
+
+            if !threat_intersected {
+                let pt = Point::new(next_coord[0], next_coord[1]);
+                for poly in &geo_polygons {
+                    if poly.intersects(&pt) {
+                        threat_intersected = true;
+                        break;
+                    }
+                }
+            }
         }
     }
 
     // A real system would sum real physical distances. Here we just return an approximation.
-    let distance_approx = cost * (40.0 * 1000.0 / 3600.0); // Assuming avg speed 40kmh
+    let distance_approx = total_cost * (40.0 * 1000.0 / 3600.0); // Assuming avg speed 40kmh
 
     let response = RouteResponse {
         geometry: RouteGeometry {
@@ -160,11 +219,12 @@ async fn calculate_route(
             coordinates: coords,
         },
         distance: distance_approx,
-        time: cost,
+        time: total_cost,
         choke_points_avoided: 0,
         proximity_score: 0.0,
         eta_to_nearest_safe_haven: "N/A".to_string(),
         intersected_threats: vec![],
+        threat_intersected,
     };
 
     Json(response)
