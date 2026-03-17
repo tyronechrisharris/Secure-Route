@@ -6,12 +6,13 @@ pub const EDGE_GEOMETRY: TableDefinition<(u64, u64), Vec<u8>> = TableDefinition:
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct SecurityAsset {
-    pub id: String,
+    pub id: u64,
     pub name: String,
+    #[serde(rename = "type")]
     pub asset_type: String,
     pub lat: f64,
     pub lon: f64,
-    pub status: String,
+    pub operational: bool,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]

@@ -115,12 +115,12 @@ pub fn build_graph(pbf_path: &str, out_path: &str) -> Result<(), Box<dyn std::er
                         else { "SAFE_HAVEN" };
 
                         security_assets.push(SecurityAsset {
-                            id: n.id.0.to_string(),
+                            id: n.id.0 as u64,
                             name: tags.get("name").map_or("Unnamed".to_string(), |v| v.to_string()),
                             asset_type: asset_type.to_string(),
                             lat: n.lat(),
                             lon: n.lon(),
-                            status: "ACTIVE".to_string(),
+                            operational: true,
                         });
                     }
                 }

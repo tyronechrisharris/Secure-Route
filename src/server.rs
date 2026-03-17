@@ -1,10 +1,11 @@
 use axum::{
-    extract::{State, Json},
+    extract::{Path, State, Json},
     http::{header, StatusCode, Uri},
     response::IntoResponse,
-    routing::{get, post},
+    routing::{get, post, put, delete},
     Router,
 };
+use redb::ReadableTable;
 use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -13,6 +14,8 @@ use tower_http::services::ServeFile;
 use crate::graph::{GraphData, SecurityAsset};
 use geo::{Polygon, Point, Coord};
 use geo::Intersects;
+
+pub const SECURITY_ASSETS: redb::TableDefinition<u64, &[u8]> = redb::TableDefinition::new("security_assets");
 
 #[derive(RustEmbed)]
 #[folder = "src/main/resources/static/"]
@@ -76,7 +79,8 @@ pub async fn run_server(graph_path: String, pmtiles_path: String, bind: String) 
 
     let app = Router::new()
         .route("/", get(index_handler))
-        .route("/api/security-assets", get(get_assets))
+        .route("/api/security-assets", get(get_assets).post(post_asset))
+        .route("/api/security-assets/{id}", put(put_asset).delete(delete_asset))
         .route("/api/secure-route", post(calculate_route))
         .route("/map.pmtiles", axum::routing::get_service(serve_pmtiles))
         .route("/{*file}", get(static_handler))
@@ -110,7 +114,76 @@ async fn static_handler(uri: Uri) -> impl IntoResponse {
 }
 
 async fn get_assets(State(state): State<Arc<AppState>>) -> Json<Vec<SecurityAsset>> {
-    Json(state.graph_data.security_assets.clone())
+    let mut assets = state.graph_data.security_assets.clone();
+
+    if let Ok(read_txn) = state.db.begin_read() {
+        if let Ok(table) = read_txn.open_table(SECURITY_ASSETS) {
+            if let Ok(iter) = table.iter() {
+                for result in iter {
+                    if let Ok((_id, value)) = result {
+                        if let Ok(asset) = serde_json::from_slice::<SecurityAsset>(value.value()) {
+                            assets.push(asset);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Json(assets)
+}
+
+async fn post_asset(
+    State(state): State<Arc<AppState>>,
+    Json(mut asset): Json<SecurityAsset>,
+) -> impl IntoResponse {
+    let id = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    asset.id = id;
+
+    let write_txn = state.db.begin_write().expect("Failed to begin write transaction");
+    {
+        let mut table = write_txn.open_table(SECURITY_ASSETS).expect("Failed to open security assets table");
+        let serialized = serde_json::to_vec(&asset).unwrap();
+        table.insert(id, serialized.as_slice()).expect("Failed to insert asset");
+    }
+    write_txn.commit().expect("Failed to commit transaction");
+
+    (StatusCode::CREATED, Json(asset)).into_response()
+}
+
+async fn put_asset(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<u64>,
+    Json(mut asset): Json<SecurityAsset>,
+) -> impl IntoResponse {
+    asset.id = id;
+
+    let write_txn = state.db.begin_write().expect("Failed to begin write transaction");
+    {
+        let mut table = write_txn.open_table(SECURITY_ASSETS).expect("Failed to open security assets table");
+        let serialized = serde_json::to_vec(&asset).unwrap();
+        table.insert(id, serialized.as_slice()).expect("Failed to update asset");
+    }
+    write_txn.commit().expect("Failed to commit transaction");
+
+    StatusCode::OK
+}
+
+async fn delete_asset(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<u64>,
+) -> impl IntoResponse {
+    let write_txn = state.db.begin_write().expect("Failed to begin write transaction");
+    {
+        let mut table = write_txn.open_table(SECURITY_ASSETS).expect("Failed to open security assets table");
+        table.remove(id).expect("Failed to remove asset");
+    }
+    write_txn.commit().expect("Failed to commit transaction");
+
+    StatusCode::NO_CONTENT
 }
 
 async fn calculate_route(
