@@ -1,5 +1,7 @@
-const protocol = new pmtiles.Protocol();
-L.addProtocol('pmtiles', protocol.tile);
+const protocol = (typeof pmtiles !== 'undefined' && pmtiles.Protocol) ? new pmtiles.Protocol() : { tile: function() {} };
+if (L.addProtocol) {
+    L.addProtocol('pmtiles', protocol.tile);
+}
 
 var map = L.map('map').setView([51.505, -0.09], 13);
 
@@ -37,8 +39,10 @@ var icons = {
     'SAFE_HAVEN': L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png', iconSize: [25, 41], iconAnchor: [12, 41]})
 };
 
-// Load threats
+// Global routing state
+let routeWaypoints = [];
 
+// Load threats
 let threatLayerMap = {};
 
 fetch('/api/threats')
@@ -59,15 +63,16 @@ fetch('/api/threats')
     })
     .catch(err => console.error("Failed to load threats:", err));
 
-
-
 map.on('pm:create', function(e) {
     if (e.shape === 'Marker') {
         const marker = e.layer;
-        extraWaypoints.push(marker);
+        routeWaypoints.push(marker);
+        marker.on('dragend', syncWaypointList);
         marker.on('pm:remove', function() {
-            extraWaypoints = extraWaypoints.filter(m => m !== marker);
+            routeWaypoints = routeWaypoints.filter(m => m !== marker);
+            syncWaypointList();
         });
+        syncWaypointList();
     }
     if (e.shape === 'Polygon' || e.shape === 'Rectangle') {
         const layer = e.layer;
@@ -114,6 +119,10 @@ map.on('pm:remove', function(e) {
         layers['THREATS'].removeLayer(e.layer);
         delete threatLayerMap[L.stamp(e.layer)];
         saveThreats();
+    }
+    if (routeWaypoints.includes(e.layer)) {
+        routeWaypoints = routeWaypoints.filter(m => m !== e.layer);
+        syncWaypointList();
     }
 });
 
@@ -185,7 +194,6 @@ function toggleLayer(type) {
 }
 
 // Global markers for start and end
-let extraWaypoints = [];
 let startMarker = L.marker([document.getElementById('startLat').value || 51.5074, document.getElementById('startLon').value || -0.1278], {
     draggable: true,
     icon: L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png', iconSize: [25, 41], iconAnchor: [12, 41]})
@@ -196,17 +204,22 @@ let endMarker = L.marker([document.getElementById('endLat').value || 51.5150, do
     icon: L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png', iconSize: [25, 41], iconAnchor: [12, 41]})
 }).addTo(map);
 
+routeWaypoints.push(startMarker);
+routeWaypoints.push(endMarker);
+
 // Sync marker dragging to input fields
 startMarker.on('dragend', function(e) {
     var latlng = e.target.getLatLng();
     document.getElementById('startLat').value = latlng.lat.toFixed(6);
     document.getElementById('startLon').value = latlng.lng.toFixed(6);
+    syncWaypointList();
 });
 
 endMarker.on('dragend', function(e) {
     var latlng = e.target.getLatLng();
     document.getElementById('endLat').value = latlng.lat.toFixed(6);
     document.getElementById('endLon').value = latlng.lng.toFixed(6);
+    syncWaypointList();
 });
 
 // Map click event to set points
@@ -251,6 +264,7 @@ window.setPoint = function(type, lat, lng) {
         document.getElementById('endLon').value = lng;
         endMarker.setLatLng([lat, lng]);
     }
+    syncWaypointList();
     map.closePopup();
 };
 
@@ -443,12 +457,7 @@ function updateStatus(text, type) {
 function calculateRoute() {
     var threatLevel = document.getElementById('threatLevel').value;
 
-    let points = [];
-    points.push([startMarker.getLatLng().lat, startMarker.getLatLng().lng]);
-    extraWaypoints.forEach(m => {
-        points.push([m.getLatLng().lat, m.getLatLng().lng]);
-    });
-    points.push([endMarker.getLatLng().lat, endMarker.getLatLng().lng]);
+    let points = routeWaypoints.map(m => [m.getLatLng().lat, m.getLatLng().lng]);
 
     let threat_polygons = [];
     layers['THREATS'].eachLayer(layer => {
@@ -525,3 +534,53 @@ function calculateRoute() {
         console.error(error);
     });
 }
+
+// Waypoint Reordering UI Logic
+window.syncWaypointList = function() {
+    const listEl = document.getElementById('waypoint-list');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+
+    routeWaypoints.forEach((marker, index) => {
+        const li = document.createElement('li');
+        li.className = 'waypoint-item';
+        li.setAttribute('data-id', L.stamp(marker));
+
+        let label = index === 0 ? "Start" : (index === routeWaypoints.length - 1 ? "End" : `Waypoint ${index}`);
+        const latlng = marker.getLatLng();
+
+        li.innerHTML = `
+            <span class="handle">☰</span>
+            <div>
+                <strong>${label}</strong><br>
+                <small>${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)}</small>
+            </div>
+        `;
+        listEl.appendChild(li);
+    });
+};
+
+// Initialize Sortable
+const waypointList = document.getElementById('waypoint-list');
+if (waypointList) {
+    new Sortable(waypointList, {
+        animation: 150,
+        handle: '.handle',
+        onEnd: function (evt) {
+            // Reorder routeWaypoints array based on DOM order
+            const newOrderIds = Array.from(waypointList.querySelectorAll('li')).map(li => li.getAttribute('data-id'));
+            const reorderedWaypoints = [];
+
+            newOrderIds.forEach(id => {
+                const marker = routeWaypoints.find(m => L.stamp(m).toString() === id);
+                if (marker) reorderedWaypoints.push(marker);
+            });
+
+            routeWaypoints = reorderedWaypoints;
+            syncWaypointList(); // Refresh labels (Start/End/Waypoint N)
+        }
+    });
+}
+
+// Initial sync
+syncWaypointList();

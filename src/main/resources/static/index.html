@@ -5,6 +5,7 @@
     <title>Security Routing Dashboard</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.css" />
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
     <style>
         body { margin: 0; padding: 0; display: flex; font-family: 'Segoe UI', sans-serif; height: 100vh; }
         #sidebar { width: 350px; background: #1a1a1a; color: #f0f0f0; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; box-shadow: 2px 0 5px rgba(0,0,0,0.5); z-index: 1000; }
@@ -32,6 +33,34 @@
         .status-processing { color: #f39c12; }
         .status-success { color: #2ecc71; }
         .status-error { color: #e74c3c; }
+        #waypoint-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 250px;
+            background: rgba(26, 26, 26, 0.9);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            z-index: 1000;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            border: 1px solid #444;
+        }
+        #waypoint-panel h3 { margin-top: 0; font-size: 16px; color: #4facfe; border-bottom: 1px solid #333; padding-bottom: 10px; }
+        #waypoint-list { list-style: none; padding: 0; margin: 10px 0; max-height: 300px; overflow-y: auto; }
+        .waypoint-item {
+            background: #333;
+            margin-bottom: 5px;
+            padding: 10px;
+            border-radius: 4px;
+            cursor: grab;
+            display: flex;
+            align-items: center;
+            font-size: 13px;
+            border: 1px solid #444;
+        }
+        .waypoint-item:active { cursor: grabbing; }
+        .waypoint-item .handle { margin-right: 10px; color: #888; }
     </style>
 </head>
 <body>
@@ -124,9 +153,21 @@
 
 <div id="map"></div>
 
+<div id="waypoint-panel">
+    <h3>Route Waypoints</h3>
+    <ul id="waypoint-list"></ul>
+    <button onclick="calculateRoute()">Calculate Route</button>
+</div>
+
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.min.js"></script>
     <script src="https://unpkg.com/pmtiles@3.0.6/dist/index.js"></script>
+    <script>
+        // Fallback for PMTiles if it loads as a module but we need it globally
+        if (typeof pmtiles === 'undefined') {
+            window.pmtiles = { Protocol: function() { return { tile: function() {} }; } };
+        }
+    </script>
 <script src="app.js"></script>
 </body>
 </html>
