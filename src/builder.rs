@@ -12,8 +12,6 @@ use std::sync::Mutex;
 const ROUTABLE_NODES: TableDefinition<i64, ()> = TableDefinition::new("routable_nodes");
 const NODE_COORDS: TableDefinition<i64, [f64; 2]> = TableDefinition::new("node_coords");
 const OSM_TO_INTERNAL: TableDefinition<i64, u64> = TableDefinition::new("osm_to_internal");
-// Key: (Source Node ID, Target Node ID), Value: Serialized Vec<[f64; 2]>
-const EDGE_GEOMETRY: TableDefinition<(u64, u64), Vec<u8>> = TableDefinition::new("edge_geometry");
 const NODE_DEGREES: TableDefinition<i64, u32> = TableDefinition::new("node_degrees");
 
 pub fn build_graph(pbf_path: &str, out_path: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -194,7 +192,7 @@ pub fn build_graph(pbf_path: &str, out_path: &str) -> Result<(), Box<dyn std::er
     let mut input_graph = InputGraph::new();
     let write_txn = db.begin_write()?;
     {
-        let mut edge_geo_table = write_txn.open_table(EDGE_GEOMETRY)?;
+        let mut edge_geo_table = write_txn.open_table(crate::graph::EDGE_GEOMETRY)?;
         for (s, t, w, is_ow) in input_graph_edges.into_inner().unwrap() {
             input_graph.add_edge(s as usize, t as usize, w);
             if !is_ow {
