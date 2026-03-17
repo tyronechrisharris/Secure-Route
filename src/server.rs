@@ -2,7 +2,7 @@ use axum::{
     extract::{Path, State, Json},
     http::{header, StatusCode, Uri},
     response::IntoResponse,
-    routing::{get, post, put, delete},
+    routing::{get, post, put},
     Router,
 };
 use redb::ReadableTable;
@@ -27,11 +27,18 @@ pub struct AppState {
 }
 
 #[derive(Deserialize)]
+pub struct ThreatPolygonPayload {
+    pub name: String,
+    pub severity: String,
+    pub coordinates: Vec<Vec<[f64; 2]>>,
+}
+
+#[derive(Deserialize)]
 pub struct RouteRequest {
     #[serde(rename = "route_points")]
     pub route_points: Vec<[f64; 2]>,
     #[serde(rename = "threat_polygons")]
-    pub threat_polygons: Vec<Vec<Vec<[f64; 2]>>>,
+    pub threat_polygons: Vec<ThreatPolygonPayload>,
     #[serde(rename = "threatLevel")]
     pub threat_level: String,
 }
@@ -186,14 +193,65 @@ async fn delete_asset(
     StatusCode::NO_CONTENT
 }
 
+struct ActiveBarrier {
+    name: String,
+    severity: String,
+    polygon: Polygon<f64>,
+}
+
 async fn calculate_route(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<RouteRequest>,
 ) -> Json<RouteResponse> {
+    let avoidance_threshold = match payload.threat_level.as_str() {
+        "LOW" => 3,
+        "MEDIUM" => 2,
+        "HIGH" => 1,
+        _ => 3,
+    };
 
-    let router = crate::router::Router::new(&state.graph_data);
+    let mut active_barriers = Vec::new();
+    let mut all_threat_polys = Vec::new();
+
+    for poly_payload in &payload.threat_polygons {
+        let poly_coords = &poly_payload.coordinates;
+        let exterior_coords: Vec<Coord<f64>> = poly_coords[0].iter().map(|c| Coord { x: c[1], y: c[0] }).collect();
+        let interiors: Vec<geo::LineString<f64>> = poly_coords.iter().skip(1).map(|ring| {
+            let ring_coords: Vec<Coord<f64>> = ring.iter().map(|c| Coord { x: c[1], y: c[0] }).collect();
+            geo::LineString::new(ring_coords)
+        }).collect();
+        let polygon = Polygon::new(exterior_coords.into(), interiors);
+
+        let poly_severity = match poly_payload.severity.as_str() {
+            "LOW" => 1,
+            "MEDIUM" => 2,
+            "HIGH" => 3,
+            _ => 1,
+        };
+
+        if poly_severity >= avoidance_threshold {
+            active_barriers.push(ActiveBarrier {
+                name: poly_payload.name.clone(),
+                severity: poly_payload.severity.clone(),
+                polygon: polygon.clone(),
+            });
+        }
+        all_threat_polys.push(ActiveBarrier {
+            name: poly_payload.name.clone(),
+            severity: poly_payload.severity.clone(),
+            polygon,
+        });
+    }
+
+    let asset_points: Vec<Point<f64>> = state.graph_data.security_assets.iter()
+        .map(|a| Point::new(a.lon, a.lat))
+        .collect();
+
     let mut full_path_ids = Vec::new();
     let mut total_cost = 0.0;
+
+    let read_txn = state.db.begin_read().expect("Failed to begin read transaction");
+    let adj_table = read_txn.open_table(crate::graph::ADJACENCY_LIST).expect("Failed to open adjacency list table");
 
     for i in 0..payload.route_points.len() - 1 {
         let start_pt = payload.route_points[i];
@@ -202,46 +260,95 @@ async fn calculate_route(
         let start_node = find_nearest_node(&state.graph_data.nodes, start_pt[0], start_pt[1]);
         let end_node = find_nearest_node(&state.graph_data.nodes, end_pt[0], end_pt[1]);
 
-        if let Some((leg_path, leg_cost)) = router.route(start_node, end_node, false, false) {
-            if !leg_path.is_empty() {
-                if !full_path_ids.is_empty() {
-                    // Avoid duplicating the joint node
-                    full_path_ids.extend(leg_path.into_iter().skip(1));
-                } else {
-                    full_path_ids.extend(leg_path);
+        if active_barriers.is_empty() {
+            let router = crate::router::Router::new(&state.graph_data);
+            if let Some((leg_path, leg_cost)) = router.route(start_node, end_node, false, false) {
+                if !leg_path.is_empty() {
+                    if !full_path_ids.is_empty() {
+                        full_path_ids.extend(leg_path.into_iter().skip(1));
+                    } else {
+                        full_path_ids.extend(leg_path);
+                    }
+                    total_cost += leg_cost;
                 }
-                total_cost += leg_cost;
+            }
+        } else {
+            // A* Fallback Engine
+            let result = pathfinding::directed::astar::astar(
+                &(start_node as u64),
+                |&u| {
+                    let mut neighbors = Vec::new();
+                    if let Ok(Some(bytes)) = adj_table.get(u) {
+                        let edges: Vec<(u64, f64)> = bincode::deserialize(bytes.value()).unwrap();
+                        for (v, weight) in edges {
+                            let v_info = &state.graph_data.nodes[v as usize];
+                            let pt = Point::new(v_info.lon, v_info.lat);
+
+                            // 1. Check active barriers
+                            let mut is_blocked = false;
+                            for barrier in &active_barriers {
+                                if barrier.polygon.intersects(&pt) {
+                                    is_blocked = true;
+                                    break;
+                                }
+                            }
+
+                            // SAFEGUARD: If blocked, skip this road entirely. Do not push to neighbors.
+                            if is_blocked {
+                                continue;
+                            }
+
+                            // 2. Asset Overwatch Discount
+                            let mut cost = weight;
+                            for asset_pt in &asset_points {
+                                let dist = ((pt.x() - asset_pt.x()).powi(2) + (pt.y() - asset_pt.y()).powi(2)).sqrt();
+                                if dist < 0.05 { // ~5km roughly
+                                    cost *= 0.5;
+                                    break;
+                                }
+                            }
+                            neighbors.push((v, cost as usize));
+                        }
+                    }
+                    neighbors
+                },
+                |&u| {
+                    let u_info = &state.graph_data.nodes[u as usize];
+                    let end_info = &state.graph_data.nodes[end_node];
+                    // Using the new, time-based heuristic
+                    heuristic_time_ms(u_info.lat, u_info.lon, end_info.lat, end_info.lon)
+                },
+                |&u| u == (end_node as u64),
+            );
+
+            if let Some((path, cost)) = result {
+                let path_usize: Vec<usize> = path.into_iter().map(|id| id as usize).collect();
+                if !full_path_ids.is_empty() {
+                    full_path_ids.extend(path_usize.into_iter().skip(1));
+                } else {
+                    full_path_ids.extend(path_usize);
+                }
+                total_cost += cost as f64;
             }
         }
     }
 
     let mut coords = Vec::new();
     let mut threat_intersected = false;
-
-    // Convert payload polygons to geo::Polygon
-    let geo_polygons: Vec<Polygon<f64>> = payload.threat_polygons.iter().map(|poly_coords| {
-        let exterior_coords: Vec<Coord<f64>> = poly_coords[0].iter().map(|c| Coord { x: c[1], y: c[0] }).collect();
-        let interiors: Vec<geo::LineString<f64>> = poly_coords.iter().skip(1).map(|ring| {
-            ring.iter().map(|c| Coord { x: c[1], y: c[0] }).collect::<Vec<Coord<f64>>>().into()
-        }).collect();
-        Polygon::new(exterior_coords.into(), interiors)
-    }).collect();
+    let mut intersected_threat_names = std::collections::HashSet::new();
 
     if !full_path_ids.is_empty() {
-        let read_txn = state.db.begin_read().expect("Failed to begin read transaction");
         let edge_geo_table = read_txn.open_table(crate::graph::EDGE_GEOMETRY).expect("Failed to open edge geometry table");
 
-        // Add first node
         let first_node = &state.graph_data.nodes[full_path_ids[0]];
         let first_coord = vec![first_node.lon, first_node.lat];
         coords.push(first_coord.clone());
 
-        // Check first node for threat
         let pt = Point::new(first_coord[0], first_coord[1]);
-        for poly in &geo_polygons {
-            if poly.intersects(&pt) {
+        for barrier in &all_threat_polys {
+            if barrier.polygon.intersects(&pt) {
                 threat_intersected = true;
-                break;
+                intersected_threat_names.insert(format!("{} ({})", barrier.name, barrier.severity));
             }
         }
 
@@ -252,16 +359,14 @@ async fn calculate_route(
             if let Ok(Some(geo_bytes)) = edge_geo_table.get((u, v)) {
                 let points: Vec<[f64; 2]> = bincode::deserialize(geo_bytes.value().as_slice()).unwrap();
                 for p in points {
-                    let c = vec![p[1], p[0]]; // Swap to [lon, lat]
+                    let c = vec![p[1], p[0]];
                     coords.push(c.clone());
 
-                    if !threat_intersected {
-                        let pt = Point::new(c[0], c[1]);
-                        for poly in &geo_polygons {
-                            if poly.intersects(&pt) {
-                                threat_intersected = true;
-                                break;
-                            }
+                    let pt = Point::new(c[0], c[1]);
+                    for barrier in &all_threat_polys {
+                        if barrier.polygon.intersects(&pt) {
+                            threat_intersected = true;
+                            intersected_threat_names.insert(format!("{} ({})", barrier.name, barrier.severity));
                         }
                     }
                 }
@@ -271,13 +376,11 @@ async fn calculate_route(
             let next_coord = vec![next_node.lon, next_node.lat];
             coords.push(next_coord.clone());
 
-            if !threat_intersected {
-                let pt = Point::new(next_coord[0], next_coord[1]);
-                for poly in &geo_polygons {
-                    if poly.intersects(&pt) {
-                        threat_intersected = true;
-                        break;
-                    }
+            let pt = Point::new(next_coord[0], next_coord[1]);
+            for barrier in &all_threat_polys {
+                if barrier.polygon.intersects(&pt) {
+                    threat_intersected = true;
+                    intersected_threat_names.insert(format!("{} ({})", barrier.name, barrier.severity));
                 }
             }
         }
@@ -296,7 +399,7 @@ async fn calculate_route(
         choke_points_avoided: 0,
         proximity_score: 0.0,
         eta_to_nearest_safe_haven: "N/A".to_string(),
-        intersected_threats: vec![],
+        intersected_threats: intersected_threat_names.into_iter().collect(),
         threat_intersected,
     };
 
@@ -316,4 +419,17 @@ fn find_nearest_node(nodes: &Vec<crate::graph::NodeInfo>, lat: f64, lon: f64) ->
     }
 
     best_id
+}
+
+fn heuristic_time_ms(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> usize {
+    let r = 6371000.0; // Earth radius in meters
+    let d_lat = (lat2 - lat1).to_radians();
+    let d_lon = (lon2 - lon1).to_radians();
+    let a = (d_lat / 2.0).sin().powi(2) +
+            lat1.to_radians().cos() * lat2.to_radians().cos() * (d_lon / 2.0).sin().powi(2);
+    let distance_meters = r * 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
+
+    // Max straight-line speed of 120 km/h (33.33 meters/second) to remain admissible
+    let time_seconds = distance_meters / 33.33;
+    (time_seconds * 1000.0) as usize
 }
