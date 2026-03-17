@@ -14,6 +14,11 @@ const NODE_COORDS: TableDefinition<i64, [f64; 2]> = TableDefinition::new("node_c
 const OSM_TO_INTERNAL: TableDefinition<i64, u64> = TableDefinition::new("osm_to_internal");
 const NODE_DEGREES: TableDefinition<i64, u32> = TableDefinition::new("node_degrees");
 
+enum BuilderMsg {
+    Geo(((u64, u64), Vec<u8>, bool)),
+    Adj((u64, u64, usize, bool)),
+}
+
 pub fn build_graph(pbf_path: &str, out_path: &str) -> Result<(), Box<dyn std::error::Error>> {
     let cache_path = format!("{}.redb", out_path);
 
@@ -163,12 +168,59 @@ pub fn build_graph(pbf_path: &str, out_path: &str) -> Result<(), Box<dyn std::er
     }
     write_txn.commit()?;
 
-    println!("Phase 3: Computing compressed edges...");
-    let input_graph_edges = Mutex::new(Vec::new());
-    let edge_geometries = Mutex::new(Vec::new());
+    println!("Phase 3: Computing compressed edges (MPSC Streaming)...");
+    let (tx, rx) = std::sync::mpsc::sync_channel::<BuilderMsg>(20_000);
+
+    let db_arc = std::sync::Arc::new(db);
+    let db_writer = db_arc.clone();
+    let writer_thread = std::thread::spawn(move || {
+        let write_txn = db_writer.begin_write().unwrap();
+        {
+            let mut geo_table = write_txn.open_table(crate::graph::EDGE_GEOMETRY).unwrap();
+            let mut adj_table = write_txn.open_table(crate::graph::ADJACENCY_LIST).unwrap();
+            let mut adj_buffer: std::collections::HashMap<u64, Vec<(u64, f64)>> = std::collections::HashMap::new();
+
+            while let Ok(msg) = rx.recv() {
+                match msg {
+                    BuilderMsg::Geo(((s, t), geo_bytes, is_ow)) => {
+                        geo_table.insert((s, t), geo_bytes.clone()).unwrap();
+                        if !is_ow {
+                            let mut path: Vec<[f64; 2]> = bincode::deserialize(&geo_bytes).unwrap();
+                            path.reverse();
+                            geo_table.insert((t, s), bincode::serialize(&path).unwrap()).unwrap();
+                        }
+                    }
+                    BuilderMsg::Adj((s, t, w, is_ow)) => {
+                        adj_buffer.entry(s).or_default().push((t, w as f64));
+                        if !is_ow {
+                            adj_buffer.entry(t).or_default().push((s, w as f64));
+                        }
+
+                        if adj_buffer.len() > 1000 {
+                            for (node_id, neighbors) in adj_buffer.drain() {
+                                let mut existing: Vec<(u64, f64)> = adj_table.get(node_id).unwrap()
+                                    .map(|v| bincode::deserialize(v.value()).unwrap())
+                                    .unwrap_or_default();
+                                existing.extend(neighbors);
+                                adj_table.insert(node_id, bincode::serialize(&existing).unwrap().as_slice()).unwrap();
+                            }
+                        }
+                    }
+                }
+            }
+            for (node_id, neighbors) in adj_buffer {
+                let mut existing: Vec<(u64, f64)> = adj_table.get(node_id).unwrap()
+                    .map(|v| bincode::deserialize(v.value()).unwrap())
+                    .unwrap_or_default();
+                existing.extend(neighbors);
+                adj_table.insert(node_id, bincode::serialize(&existing).unwrap().as_slice()).unwrap();
+            }
+        }
+        write_txn.commit().unwrap();
+    });
 
     {
-        let read_txn = db.begin_read()?;
+        let read_txn = db_arc.begin_read()?;
         let mapping_table = read_txn.open_table(OSM_TO_INTERNAL)?;
         let coord_table = read_txn.open_table(NODE_COORDS)?;
 
@@ -180,35 +232,31 @@ pub fn build_graph(pbf_path: &str, out_path: &str) -> Result<(), Box<dyn std::er
                 if way.tags.contains_key("highway") {
                     ways_batch.push(way);
                     if ways_batch.len() >= 10000 {
-                        process_ways_batch(&ways_batch, &mapping_table, &coord_table, &input_graph_edges, &edge_geometries);
+                        process_ways_batch(&ways_batch, &mapping_table, &coord_table, tx.clone());
                         ways_batch.clear();
                     }
                 }
             }
         }
-        process_ways_batch(&ways_batch, &mapping_table, &coord_table, &input_graph_edges, &edge_geometries);
+        process_ways_batch(&ways_batch, &mapping_table, &coord_table, tx);
     }
 
+    drop(db_arc);
+    writer_thread.join().unwrap();
+
+    let db = Database::open(&cache_path)?;
     let mut input_graph = InputGraph::new();
-    let write_txn = db.begin_write()?;
-    {
-        let mut edge_geo_table = write_txn.open_table(crate::graph::EDGE_GEOMETRY)?;
-        for (s, t, w, is_ow) in input_graph_edges.into_inner().unwrap() {
-            input_graph.add_edge(s as usize, t as usize, w);
-            if !is_ow {
-                input_graph.add_edge(t as usize, s as usize, w);
-            }
-        }
-        for ((s, t), geo_bytes, is_ow) in edge_geometries.into_inner().unwrap() {
-            edge_geo_table.insert((s, t), geo_bytes.clone())?;
-            if !is_ow {
-                let mut path: Vec<[f64; 2]> = bincode::deserialize(&geo_bytes).unwrap();
-                path.reverse();
-                edge_geo_table.insert((t, s), bincode::serialize(&path).unwrap())?;
-            }
+    println!("Phase 3: Populating InputGraph from ADJACENCY_LIST...");
+    let read_txn = db.begin_read()?;
+    let adj_table = read_txn.open_table(crate::graph::ADJACENCY_LIST)?;
+    for result in adj_table.iter()? {
+        let (node_id_v, neighbors_v) = result?;
+        let s = node_id_v.value();
+        let neighbors: Vec<(u64, f64)> = bincode::deserialize(neighbors_v.value())?;
+        for (t, weight) in neighbors {
+            input_graph.add_edge(s as usize, t as usize, weight as usize);
         }
     }
-    write_txn.commit()?;
 
     input_graph.freeze();
     println!("Preparing FastPaths CH Graph...");
@@ -232,19 +280,26 @@ fn process_ways_batch(
     ways: &[Way],
     mapping_table: &ReadOnlyTable<i64, u64>,
     coord_table: &ReadOnlyTable<i64, [f64; 2]>,
-    input_graph_edges: &Mutex<Vec<(u64, u64, usize, bool)>>,
-    edge_geometries: &Mutex<Vec<((u64, u64), Vec<u8>, bool)>>
+    tx: std::sync::mpsc::SyncSender<BuilderMsg>,
 ) {
     ways.par_iter().for_each(|way| {
         let is_ow = way.tags.get("oneway").map(|v| v.as_str()) == Some("yes");
-        let speed = match way.tags.get("highway").map(|v| v.as_str()) {
-            Some("motorway") | Some("trunk") => 100.0,
-            Some("primary") => 80.0,
-            Some("secondary") => 60.0,
-            Some("tertiary") => 50.0,
-            Some("residential") => 30.0,
-            Some("living_street") => 10.0,
-            _ => 40.0,
+        let speed = if let Some(maxspeed) = way.tags.get("maxspeed").map(|v| v.as_str()) {
+            if maxspeed.ends_with(" mph") {
+                maxspeed.replace(" mph", "").parse::<f64>().unwrap_or(40.0) * 1.60934
+            } else {
+                maxspeed.parse::<f64>().unwrap_or(40.0)
+            }
+        } else {
+            match way.tags.get("highway").map(|v| v.as_str()) {
+                Some("motorway") | Some("trunk") => 100.0,
+                Some("primary") => 80.0,
+                Some("secondary") => 60.0,
+                Some("tertiary") => 50.0,
+                Some("residential") => 30.0,
+                Some("living_street") => 10.0,
+                _ => 40.0,
+            }
         };
 
         let nodes = &way.nodes;
@@ -265,10 +320,10 @@ fn process_ways_batch(
                     }
 
                     if let Some(end_id) = mapping_table.get(n2).unwrap().map(|v| v.value()) {
-                        input_graph_edges.lock().unwrap().push((start_id, end_id, weight as usize, is_ow));
+                        tx.send(BuilderMsg::Adj((start_id, end_id, weight as usize, is_ow))).unwrap();
 
                         let geo_bytes = bincode::serialize(&path).unwrap();
-                        edge_geometries.lock().unwrap().push(((start_id, end_id), geo_bytes, is_ow));
+                        tx.send(BuilderMsg::Geo(((start_id, end_id), geo_bytes, is_ow))).unwrap();
 
                         i = j;
                         break;

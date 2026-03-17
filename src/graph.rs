@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use redb::TableDefinition;
 
 pub const EDGE_GEOMETRY: TableDefinition<(u64, u64), Vec<u8>> = TableDefinition::new("edge_geometry");
+pub const ADJACENCY_LIST: TableDefinition<u64, &[u8]> = TableDefinition::new("adjacency_list");
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct SecurityAsset {

@@ -25,6 +25,7 @@ tokio = { version = "1.50.0", features = ["full"] }
 tower = "0.5.3"
 tower-http = { version = "0.6.8", features = ["fs"] }
 redb = "2.1"
+pathfinding = "4.3.0"
 
 # High-Performance Additions for M4 Max Architecture
 mimalloc = "0.1"

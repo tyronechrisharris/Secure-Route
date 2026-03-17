@@ -576,17 +576,14 @@ function calculateRoute() {
     let threat_polygons = [];
     layers['THREATS'].eachLayer(layer => {
         if (layer instanceof L.Polygon) {
+            let name = layer.feature?.properties?.name || "Unnamed Threat";
+            let severity = layer.feature?.properties?.severity || "HIGH";
             let latlngs = layer.getLatLngs();
-            // Leaflet polygons can be nested arrays
-            if (Array.isArray(latlngs[0]) && !(latlngs[0][0] instanceof L.LatLng)) {
-                // Multi-ring
-                let rings = latlngs.map(ring => ring.map(ll => [ll.lat, ll.lng]));
-                threat_polygons.push(rings);
-            } else {
-                // Single ring
-                let ring = latlngs.map(ll => [ll.lat, ll.lng]);
-                threat_polygons.push([ring]);
-            }
+            let rings = Array.isArray(latlngs[0]) && !(latlngs[0][0] instanceof L.LatLng)
+                ? latlngs.map(ring => (Array.isArray(ring) ? ring.map(ll => [ll.lat, ll.lng]) : [ring.lat, ring.lng]))
+                : [latlngs.map(ll => [ll.lat, ll.lng])];
+
+            threat_polygons.push({ name: name, severity: severity, coordinates: rings });
         }
     });
 
