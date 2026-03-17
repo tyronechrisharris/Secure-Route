@@ -1,6 +1,5 @@
 use fast_paths::FastGraph;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct SecurityAsset {
@@ -23,8 +22,6 @@ pub struct NodeInfo {
 #[derive(Deserialize, Serialize, Debug)]
 pub struct GraphData {
     pub nodes: Vec<NodeInfo>,
-    // Mapping from OSM ID to internal sequential ID
-    pub osm_to_internal: HashMap<i64, usize>,
     pub security_assets: Vec<SecurityAsset>,
     pub fast_graph: FastGraph,
 }

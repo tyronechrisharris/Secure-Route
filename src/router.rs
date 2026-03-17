@@ -1,5 +1,5 @@
-use crate::graph::{GraphData, NodeInfo};
-use fast_paths::{FastGraph, PathCalculator};
+use crate::graph::GraphData;
+use fast_paths::PathCalculator;
 
 pub struct Router<'a> {
     pub graph_data: &'a GraphData,
