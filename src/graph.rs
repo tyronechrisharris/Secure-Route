@@ -1,5 +1,8 @@
 use fast_paths::FastGraph;
 use serde::{Deserialize, Serialize};
+use redb::TableDefinition;
+
+pub const EDGE_GEOMETRY: TableDefinition<(u64, u64), Vec<u8>> = TableDefinition::new("edge_geometry");
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct SecurityAsset {

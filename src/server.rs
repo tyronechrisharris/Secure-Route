@@ -18,6 +18,7 @@ struct Asset;
 
 pub struct AppState {
     pub graph_data: GraphData,
+    pub db: redb::Database,
 }
 
 #[derive(Deserialize)]
@@ -61,8 +62,13 @@ pub async fn run_server(graph_path: String, pmtiles_path: String, bind: String) 
     let graph_bytes = std::fs::read(&graph_path).expect("Failed to read graph file");
     let graph_data: GraphData = bincode::deserialize(&graph_bytes).expect("Failed to deserialize graph data via bincode");
 
+    let cache_path = format!("{}.redb", graph_path);
+    println!("Opening redb database at {}...", cache_path);
+    let db = redb::Database::open(&cache_path).expect("Failed to open redb database");
+
     let state = Arc::new(AppState {
         graph_data,
+        db,
     });
 
     // ServeFile correctly implements HTTP Range requests natively which map.pmtiles requires.
@@ -121,9 +127,28 @@ async fn calculate_route(
 
     let mut coords = Vec::new();
 
-    for i in 0..path_ids.len() {
-        let n = &state.graph_data.nodes[path_ids[i]];
-        coords.push(vec![n.lon, n.lat]);
+    if !path_ids.is_empty() {
+        let read_txn = state.db.begin_read().expect("Failed to begin read transaction");
+        let edge_geo_table = read_txn.open_table(crate::graph::EDGE_GEOMETRY).expect("Failed to open edge geometry table");
+
+        // Add first node
+        let first_node = &state.graph_data.nodes[path_ids[0]];
+        coords.push(vec![first_node.lon, first_node.lat]);
+
+        for i in 0..path_ids.len() - 1 {
+            let u = path_ids[i] as u64;
+            let v = path_ids[i + 1] as u64;
+
+            if let Ok(Some(geo_bytes)) = edge_geo_table.get((u, v)) {
+                let points: Vec<[f64; 2]> = bincode::deserialize(geo_bytes.value().as_slice()).unwrap();
+                for p in points {
+                    coords.push(vec![p[1], p[0]]); // Swap to [lon, lat]
+                }
+            }
+
+            let next_node = &state.graph_data.nodes[path_ids[i + 1]];
+            coords.push(vec![next_node.lon, next_node.lat]);
+        }
     }
 
     // A real system would sum real physical distances. Here we just return an approximation.
