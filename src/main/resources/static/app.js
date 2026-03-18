@@ -1,7 +1,7 @@
 // 1. Initialize the Leaflet map FIRST
 // Default to the Manila operational zone (Zoom Level 13)
 // Note: Swap to [36.0104, -84.2696] for local Oak Ridge testing
-var map = L.map('map').setView([14.5995, 120.9842], 13);
+var map = L.map('map').setView([36.0104, -84.2696], 13);
 
 // 2. Add the Vector PMTiles layer using the Protomaps Leaflet renderer
 protomapsL.leafletLayer({
