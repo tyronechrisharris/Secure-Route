@@ -68,7 +68,26 @@ pub struct RouteGeometry {
     pub coordinates: Vec<Vec<f64>>,
 }
 
+async fn get_maps() -> Json<Vec<String>> {
+    // Return a mock list to satisfy the dropdown UI
+    Json(vec!["planet-latest.pmtiles".to_string()])
+}
+
+async fn get_map_bounds() -> Json<serde_json::Value> {
+    // Return a generic global bounding box to prevent frontend crashes
+    Json(serde_json::json!({
+        "minLat": -90.0,
+        "maxLat": 90.0,
+        "minLon": -180.0,
+        "maxLon": 180.0
+    }))
+}
+
 pub async fn run_server(graph_path: String, pmtiles_path: String, bind: String) {
+    if !std::path::Path::new(&pmtiles_path).exists() {
+        eprintln!("CRITICAL WARNING: PMTiles file not found at '{}'. The background map will fail to render. Please check your startup arguments.", pmtiles_path);
+    }
+
     let boot_start = std::time::Instant::now();
 
     println!("Loading Graph Data from {} into memory...", graph_path);
@@ -109,6 +128,8 @@ pub async fn run_server(graph_path: String, pmtiles_path: String, bind: String) 
         .route("/api/security-assets/{id}", put(put_asset).delete(delete_asset))
         .route("/api/secure-route", post(calculate_route))
         .route("/api/threats", get(get_threats).post(post_threats))
+        .route("/api/maps", get(get_maps))
+        .route("/api/map-bounds", get(get_map_bounds))
         .route("/map.pmtiles", axum::routing::get_service(serve_pmtiles))
         .route("/{*file}", get(static_handler))
         .with_state(state);
