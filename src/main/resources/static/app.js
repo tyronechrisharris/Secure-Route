@@ -5,7 +5,7 @@ if (L.addProtocol) {
 
 var map = L.map('map').setView([51.505, -0.09], 13);
 
-L.tileLayer('pmtiles://localhost:8080/map.pmtiles', {
+L.tileLayer(`pmtiles://${window.location.host}/map.pmtiles`, {
     maxZoom: 19,
     attribution: '© OpenStreetMap contributors'
 }).addTo(map);
