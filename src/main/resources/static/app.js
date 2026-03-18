@@ -1,5 +1,7 @@
 // 1. Initialize the Leaflet map FIRST
-var map = L.map('map').setView([51.505, -0.09], 13);
+// Default to the Manila operational zone (Zoom Level 13)
+// Note: Swap to [36.0104, -84.2696] for local Oak Ridge testing
+var map = L.map('map').setView([14.5995, 120.9842], 13);
 
 // 2. Add the Vector PMTiles layer using the Protomaps Leaflet renderer
 protomapsL.leafletLayer({
@@ -269,12 +271,12 @@ function toggleLayer(type) {
 }
 
 // Global markers for start and end
-let startMarker = L.marker([document.getElementById('startLat').value || 51.5074, document.getElementById('startLon').value || -0.1278], {
+let startMarker = L.marker([document.getElementById('startLat').value || 14.5995, document.getElementById('startLon').value || 120.9842], {
     draggable: true,
     icon: L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png', iconSize: [25, 41], iconAnchor: [12, 41]})
 }).addTo(map);
 
-let endMarker = L.marker([document.getElementById('endLat').value || 51.5150, document.getElementById('endLon').value || -0.1100], {
+let endMarker = L.marker([document.getElementById('endLat').value || 14.6095, document.getElementById('endLon').value || 120.9942], {
     draggable: true,
     icon: L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png', iconSize: [25, 41], iconAnchor: [12, 41]})
 }).addTo(map);
