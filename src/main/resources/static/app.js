@@ -1,13 +1,10 @@
 // 1. Initialize the Leaflet map FIRST
 var map = L.map('map').setView([51.505, -0.09], 13);
 
-// 2. Initialize the PMTiles instance pointing to the dynamic Axum server host
-const p = new pmtiles.PMTiles(`http://${window.location.host}/map.pmtiles`);
-
-// 3. Add the PMTiles layer using the dedicated Leaflet integration function
-pmtiles.leafletRasterLayer(p, {
-    maxZoom: 19,
-    attribution: '© OpenStreetMap contributors'
+// 2. Add the Vector PMTiles layer using the Protomaps Leaflet renderer
+protomapsL.leafletLayer({
+    url: `http://${window.location.host}/map.pmtiles`,
+    theme: 'light' // Automatically applies a clean styling theme to the raw vector data
 }).addTo(map);
 
 var layers = {
