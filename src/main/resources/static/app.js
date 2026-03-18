@@ -1,9 +1,11 @@
-const protocol = new pmtiles.Protocol();
-L.addProtocol('pmtiles', protocol.tile);
-
+// 1. Initialize the Leaflet map FIRST
 var map = L.map('map').setView([51.505, -0.09], 13);
 
-L.tileLayer(`pmtiles://${window.location.host}/map.pmtiles`, {
+// 2. Initialize the PMTiles instance pointing to the dynamic Axum server host
+const p = new pmtiles.PMTiles(`http://${window.location.host}/map.pmtiles`);
+
+// 3. Add the PMTiles layer using the dedicated Leaflet integration function
+pmtiles.leafletRasterLayer(p, {
     maxZoom: 19,
     attribution: '© OpenStreetMap contributors'
 }).addTo(map);
