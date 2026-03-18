@@ -1,35 +1,110 @@
-# Secure Route: High-Performance Offline Routing
+# Tactical Routing Engine (Secure-Route)
 
-Secure Route is a continent-scale routing engine designed for security-conscious applications. It provides mathematically optimal routing with offline-first map rendering and real-time threat detection.
+The Tactical Routing Engine is a high-performance, offline-first routing solution designed for high-stakes environments requiring planet-scale data processing and granular threat avoidance. It combines the speed of Contraction Hierarchies with the flexibility of a dynamic A* engine.
 
-🚀 Getting Started
-This routing engine utilizes an out-of-core Contraction Hierarchies architecture. It calculates mathematically optimal routes in milliseconds while maintaining a massive, continent-scale road network within standard memory limits using a local redb geometry cache.
+## 1. Executive Overview & Core Features
 
-1. Download the Map Visuals (PMTiles)
-The frontend UI renders the map entirely offline using a single 120GB .pmtiles archive. You must download this file into the root directory before starting the server.
+*   **Offline, High-Performance Routing**: Utilizes Contraction Hierarchies (via `fast_paths`) for millisecond-level routing on static road networks.
+*   **Dynamic Threat Avoidance**: Real-time avoidance of user-defined threat zones using a fallback A* routing engine.
+*   **Persistent Tactical Assets**: Integrated management of Safe Havens, Military Police, and Hospitals with proximity-based cost incentives.
+*   **Planet-Scale RAM Safety**: Out-of-core graph builder using `redb` and MPSC streaming to process 70GB+ OSM files on consumer hardware.
+*   **Interactive Operations UI**: A sophisticated Leaflet-based frontend with drag-and-drop waypoint management, real-time threat drawing, and breach reporting.
 
-Option A: Native Curl (Recommended)
-curl -C - -o map.pmtiles https://build.protomaps.com/20260317.pmtiles
-(Note: The -C - flag allows you to safely stop and resume the massive download at any time).
+---
 
-Option B: Docker (Parallel Download)
-docker run --rm -it -v $(pwd):/data -w /data alpine sh -c "sed -i 's/https/http/g' /etc/apk/repositories && apk add --no-cache aria2 && aria2c --check-certificate=false -x 16 -s 16 -c 'https://build.protomaps.com/20260317.pmtiles' -o map.pmtiles"
+## 2. The Build Pipeline (`builder.rs`)
 
-2. Build the Routing Graph
-Before you can route, you must compile the raw OpenStreetMap .pbf data into an optimized fast_paths graph.
-cargo build --release
-./target/release/secure-route build --pbf data/north-america-latest.osm.pbf --out north-america-latest.osm.graph
+The build pipeline transforms raw OpenStreetMap `.pbf` data into an optimized routing graph.
 
-Auto-Resume: If the build process is interrupted, running the command again will automatically detect the existing .redb cache and skip the initial parsing phases.
-Topology Compression: The builder automatically compresses intermediate road curves to save RAM, storing the visual geometry safely on your SSD.
+### MPSC Streaming Architecture
+To prevent Out-Of-Memory (OOM) crashes on massive datasets, the builder utilizes Multi-Producer, Single-Consumer (MPSC) channels. Geometries and adjacency data are processed in parallel across CPU cores and streamed to a dedicated background writer thread. This thread performs batched inserts into the `redb` database, ensuring that only a small portion of the multi-gigabyte dataset resides in RAM at any given time.
 
-3. Serve the Application
-Once the .graph is built and the map.pmtiles file is in your directory, start the API and frontend UI:
-./target/release/secure-route serve --graph north-america-latest.osm.graph --tiles map.pmtiles --bind 0.0.0.0:8080
-Navigate to http://localhost:8080 in your web browser.
+### Redb Caching & "Warm Rebuilds"
+The builder uses `redb` as an embedded key-value store for intermediate data.
+*   **Warm Rebuild**: If the builder detects an existing `.redb` cache (specifically the `NODE_COORDS` table), it automatically skips the expensive Pass 1 (Node Identification) and Pass 2 (Coordinate Extraction), drastically reducing time for repeated builds.
 
-🎯 Core Features & Usage
+### Speed Limit & Weight Calculation
+Weights are calculated based on travel time (milliseconds).
+*   **OSM Maxspeed Parsing**: The builder extracts `maxspeed` tags, explicitly handling `mph` to `km/h` conversions (value * 1.60934).
+*   **Heuristic Fallbacks**: If no speed tag is found, it falls back to highway-class defaults (e.g., Motorway: 100km/h, Residential: 30km/h).
+*   **Haversine Distance**: Edge weights are calculated using the Haversine formula to ensure high-fidelity distance measurements across the globe.
 
-Multi-Waypoint Routing: Use the marker tool to drop multiple pins on the map. The engine will sequentially calculate the fastest path passing through all your designated waypoints.
-Threat Area Detection: Use the polygon tool to draw restricted zones or active threat areas. When you request a route, the backend performs high-speed intersection math. If your path crosses a threat polygon, the UI will alert you and highlight the compromised route segment in red.
-High-Fidelity Edge Unpacking: The backend queries the redb database in real-time to reconstruct the exact physical curves of the roads, ensuring the visual route smoothly traces the physical map rather than snapping to straight, jagged lines.
+### Database Layout
+The `.redb` file contains several critical B-Tree tables:
+*   `NODE_COORDS`: Maps OSM Node IDs to `[lat, lon]`.
+*   `OSM_TO_INTERNAL`: Maps OSM IDs to sequential internal IDs used by the routing engines.
+*   `EDGE_GEOMETRY`: Stores compressed path coordinates for every edge, allowing for high-fidelity "edge unpacking" during API responses.
+*   `ADJACENCY_LIST`: Stores neighbor lists for the dynamic A* fallback engine.
+
+---
+
+## 3. The Backend Architecture (`server.rs`)
+
+The backend is built with Axum and serves as the bridge between the routing engines and the frontend.
+
+### Data Structures
+*   `SecurityAsset`: Persistent tactical points (POLICE, EMS, MILITARY, SAFE_HAVEN).
+*   `RouteRequest`: Contains `route_points` (waypoints), `threat_polygons`, and a `threatLevel` threshold.
+*   `RouteResponse`: Returns the full geometry, distance, travel time, and a list of `intersectedThreats`.
+
+### Dual-Engine Logic
+The server intelligently selects the best routing strategy:
+1.  **FastPaths Engine (CH)**: If no active threat barriers are present, the server uses Contraction Hierarchies for near-instant routing.
+2.  **A* Fallback Engine**: If any threat polygons intersect with the user's requested `threatLevel`, the system falls back to a custom A* implementation.
+
+### A* Engine Mechanics
+The fallback engine uses the `pathfinding` crate with a custom cost function:
+*   **Threat Avoidance (PIP)**: Before checking a neighbor, the engine performs a Point-in-Polygon (PIP) check against all active barriers. If a node falls within a threat zone, it is treated as having infinite cost, effectively severing that road from the network.
+*   **Security Asset Overwatch**: Nodes within ~5km of a security asset receive a **0.5x cost discount (security bonus)**, incentivizing paths that stay close to support infrastructure.
+*   **Time-Based Heuristic**: The `heuristic_time_ms` function uses a straight-line travel time estimate (assuming a max speed of 120km/h) to remain admissible and efficient.
+
+---
+
+## 4. The Frontend Architecture (`app.js` & `index.html`)
+
+The frontend provides a real-time tactical dashboard for operators.
+
+### Interactive Map Control
+*   **Leaflet-Geoman**: Used for drawing and editing threat polygons and markers. Users can attach metadata like "Name" and "Severity" directly to polygons.
+*   **PMTiles**: Map visuals are rendered entirely offline from a local `.pmtiles` archive using the Protomaps protocol.
+
+### Tactical Asset Management
+The UI provides full CRUD capabilities for security assets. Users can click on the map to create new assets, which are persisted to the backend's `redb` database. Existing assets can be edited or moved in real-time.
+
+### Waypoint Management & SortableJS
+The `#waypoint-list` panel uses `SortableJS` to allow operators to drag and drop waypoints. This reordering is synchronized with the internal `routeWaypoints` array, ensuring that the `calculateRoute` call reflects the operator's desired sequence of travel.
+
+### Breach Reporting
+When a route is calculated, the backend returns an `intersectedThreats` array. If any segments of the path cross a threat zone (even if the avoidance engine was active), the UI highlights the route in **RED** and displays a critical warning alert.
+
+---
+
+## 5. Setup, Build & Run Instructions
+
+### Dependencies
+*   Rust Toolchain (latest stable)
+*   A `.pbf` OpenStreetMap extract (e.g., from Geofabrik)
+*   A `.pmtiles` file for map visuals (optional but recommended for the UI)
+
+### 1. Scorched Earth (Clean Start)
+To ensure a fresh build, delete existing cache files:
+```bash
+rm -f north-america.graph north-america.graph.redb
+```
+
+### 2. Build the Routing Graph
+Compile the OSM data into the tactical graph:
+```bash
+cargo run --release -- build --pbf data/map-data.osm.pbf --out map.graph
+```
+*Wait for the "Planet graph successfully built" message.*
+
+### 3. Start the Server
+Launch the Axum API and frontend:
+```bash
+cargo run --release -- serve --graph map.graph --tiles map.pmtiles --bind 0.0.0.0:8080
+```
+
+### 4. Access the Dashboard
+Open your browser and navigate to:
+`http://localhost:8080`
