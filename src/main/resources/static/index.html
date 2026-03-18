@@ -6,6 +6,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.css" />
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    <script src="https://unpkg.com/pmtiles@3.0.6/dist/pmtiles.js"></script>
     <style>
         body { margin: 0; padding: 0; display: flex; font-family: 'Segoe UI', sans-serif; height: 100vh; }
         #sidebar { width: 350px; background: #1a1a1a; color: #f0f0f0; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; box-shadow: 2px 0 5px rgba(0,0,0,0.5); z-index: 1000; }
@@ -161,13 +162,6 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@latest/dist/leaflet-geoman.min.js"></script>
-    <script src="https://unpkg.com/pmtiles@3.0.6/dist/index.js"></script>
-    <script>
-        // Fallback for PMTiles if it loads as a module but we need it globally
-        if (typeof pmtiles === 'undefined') {
-            window.pmtiles = { Protocol: function() { return { tile: function() {} }; } };
-        }
-    </script>
 <script src="app.js"></script>
 </body>
 </html>

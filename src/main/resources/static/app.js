@@ -1,7 +1,5 @@
-const protocol = (typeof pmtiles !== 'undefined' && pmtiles.Protocol) ? new pmtiles.Protocol() : { tile: function() {} };
-if (L.addProtocol) {
-    L.addProtocol('pmtiles', protocol.tile);
-}
+const protocol = new pmtiles.Protocol();
+L.addProtocol('pmtiles', protocol.tile);
 
 var map = L.map('map').setView([51.505, -0.09], 13);
 
