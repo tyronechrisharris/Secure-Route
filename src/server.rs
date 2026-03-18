@@ -68,13 +68,21 @@ pub struct RouteGeometry {
 }
 
 pub async fn run_server(graph_path: String, pmtiles_path: String, bind: String) {
-    println!("Loading Graph Data from {}...", graph_path);
+    let boot_start = std::time::Instant::now();
+
+    println!("Loading Graph Data from {} into memory...", graph_path);
     let graph_bytes = std::fs::read(&graph_path).expect("Failed to read graph file");
+    println!("File read in {:.2?}. Deserializing bincode...", boot_start.elapsed());
+
+    let decode_start = std::time::Instant::now();
     let graph_data: GraphData = bincode::deserialize(&graph_bytes).expect("Failed to deserialize graph data via bincode");
+    println!("Graph deserialized in {:.2?}.", decode_start.elapsed());
 
     let cache_path = format!("{}.redb", graph_path);
     println!("Opening redb database at {}...", cache_path);
     let db = redb::Database::open(&cache_path).expect("Failed to open redb database");
+
+    println!("Server fully initialized in total time: {:.2?}", boot_start.elapsed());
 
     let state = Arc::new(AppState {
         graph_data,
@@ -203,6 +211,7 @@ async fn calculate_route(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<RouteRequest>,
 ) -> Json<RouteResponse> {
+    let route_start = std::time::Instant::now();
     let avoidance_threshold = match payload.threat_level.as_str() {
         "LOW" => 3,
         "MEDIUM" => 2,
@@ -403,6 +412,7 @@ async fn calculate_route(
         threat_intersected,
     };
 
+    println!("Route calculation complete in {:.2?}", route_start.elapsed());
     Json(response)
 }
 
