@@ -16,6 +16,7 @@ use geo::{Polygon, Point, Coord};
 use geo::Intersects;
 
 pub const SECURITY_ASSETS: redb::TableDefinition<u64, &[u8]> = redb::TableDefinition::new("security_assets");
+pub const THREATS: redb::TableDefinition<&str, &[u8]> = redb::TableDefinition::new("threats");
 
 #[derive(RustEmbed)]
 #[folder = "src/main/resources/static/"]
@@ -82,6 +83,16 @@ pub async fn run_server(graph_path: String, pmtiles_path: String, bind: String) 
     println!("Opening redb database at {}...", cache_path);
     let db = redb::Database::open(&cache_path).expect("Failed to open redb database");
 
+    // Ensure all tables exist
+    {
+        let write_txn = db.begin_write().expect("Failed to begin initialization transaction");
+        write_txn.open_table(SECURITY_ASSETS).expect("Failed to ensure SECURITY_ASSETS table");
+        write_txn.open_table(THREATS).expect("Failed to ensure THREATS table");
+        write_txn.open_table(crate::graph::EDGE_GEOMETRY).expect("Failed to ensure EDGE_GEOMETRY table");
+        write_txn.open_table(crate::graph::ADJACENCY_LIST).expect("Failed to ensure ADJACENCY_LIST table");
+        write_txn.commit().expect("Failed to commit initialization transaction");
+    }
+
     println!("Server fully initialized in total time: {:.2?}", boot_start.elapsed());
 
     let state = Arc::new(AppState {
@@ -97,6 +108,7 @@ pub async fn run_server(graph_path: String, pmtiles_path: String, bind: String) 
         .route("/api/security-assets", get(get_assets).post(post_asset))
         .route("/api/security-assets/{id}", put(put_asset).delete(delete_asset))
         .route("/api/secure-route", post(calculate_route))
+        .route("/api/threats", get(get_threats).post(post_threats))
         .route("/map.pmtiles", axum::routing::get_service(serve_pmtiles))
         .route("/{*file}", get(static_handler))
         .with_state(state);
@@ -199,6 +211,47 @@ async fn delete_asset(
     write_txn.commit().expect("Failed to commit transaction");
 
     StatusCode::NO_CONTENT
+}
+
+async fn get_threats(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    if let Ok(read_txn) = state.db.begin_read() {
+        if let Ok(table) = read_txn.open_table(THREATS) {
+            if let Ok(Some(data)) = table.get("current_threats") {
+                // Return the saved GeoJSON blob
+                return ([(header::CONTENT_TYPE, "application/json")], data.value().to_vec()).into_response();
+            }
+        }
+    }
+    // If no threats exist yet, return an empty GeoJSON FeatureCollection to prevent frontend JSON errors
+    ([(header::CONTENT_TYPE, "application/json")], r#"{"type":"FeatureCollection","features":[]}"#.to_string()).into_response()
+}
+
+async fn post_threats(
+    State(state): State<Arc<AppState>>,
+    body: String, // Accept the raw GeoJSON string
+) -> impl IntoResponse {
+    let write_txn = state.db.begin_write().map_err(|e| {
+        (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to begin write transaction: {}", e)).into_response()
+    })?;
+
+    let res = (|| {
+        let mut table = write_txn.open_table(THREATS)?;
+        table.insert("current_threats", body.as_bytes())?;
+        Ok::<(), redb::Error>(())
+    })();
+
+    match res {
+        Ok(_) => {
+            write_txn.commit().map_err(|e| {
+                (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to commit transaction: {}", e)).into_response()
+            })?;
+            Ok(StatusCode::OK.into_response())
+        }
+        Err(e) => {
+            write_txn.abort().ok();
+            Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to save threats: {}", e)).into_response())
+        }
+    }
 }
 
 struct ActiveBarrier {
