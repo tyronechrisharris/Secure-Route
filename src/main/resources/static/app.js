@@ -5,7 +5,7 @@ var map = L.map('map').setView([36.0104, -84.2696], 13);
 
 // 2. Add the Vector PMTiles layer using the Protomaps Leaflet renderer
 protomapsL.leafletLayer({
-    url: `http://${window.location.host}/map.pmtiles`,
+    url: '/map.pmtiles',
     theme: 'light' // Automatically applies a clean styling theme to the raw vector data
 }).addTo(map);
 
