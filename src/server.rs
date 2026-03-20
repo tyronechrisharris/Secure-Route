@@ -10,6 +10,7 @@ use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::net::TcpListener;
+use tower_http::cors::{CorsLayer, Any};
 use tower_http::services::ServeFile;
 use crate::graph::{GraphData, SecurityAsset};
 use geo::{Polygon, Point, Coord};
@@ -122,6 +123,12 @@ pub async fn run_server(graph_path: String, pmtiles_path: String, bind: String) 
     // ServeFile correctly implements HTTP Range requests natively which map.pmtiles requires.
     let serve_pmtiles = ServeFile::new(pmtiles_path);
 
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(vec![header::RANGE, header::ACCEPT, header::CONTENT_TYPE])
+        .expose_headers(vec![header::CONTENT_LENGTH, header::CONTENT_RANGE, header::CONTENT_TYPE]);
+
     let app = Router::new()
         .route("/", get(index_handler))
         .route("/api/security-assets", get(get_assets).post(post_asset))
@@ -132,6 +139,7 @@ pub async fn run_server(graph_path: String, pmtiles_path: String, bind: String) 
         .route("/api/map-bounds", get(get_map_bounds))
         .route("/map.pmtiles", axum::routing::get_service(serve_pmtiles))
         .route("/{*file}", get(static_handler))
+        .layer(cors)
         .with_state(state);
 
     println!("Listening on http://{}", bind);

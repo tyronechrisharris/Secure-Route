@@ -1,13 +1,61 @@
 // 1. Initialize the Leaflet map FIRST
-var map = L.map('map').setView([14.5995, 120.9842], 13); // Manila Default
+var map = L.map('map').setView([43.7696, 11.2558], 13); // Firenze Default
 
-// 2. Construct a strict Absolute URL for the Web Worker
-const mapUrl = `${window.location.origin}/map.pmtiles`;
+// 2. Setup PMTiles MapLibre protocol
+const protocol = new pmtiles.Protocol();
+maplibregl.addProtocol("pmtiles", protocol.tile);
 
-// 3. Add the Vector PMTiles layer
-protomapsL.leafletLayer({
-    url: mapUrl,
-    theme: 'light'
+// 3. Construct URL
+const mapUrl = `pmtiles://${window.location.origin}/map.pmtiles`;
+
+// 4. Add the Vector layer via MapLibre GL Leaflet
+const glLayer = L.maplibreGL({
+    style: {
+        version: 8,
+        glyphs: "https://protomaps.github.io/basemaps-assets/fonts/{fontstack}/{range}.pbf",
+        sources: {
+            "protomaps": {
+                type: "vector",
+                url: mapUrl,
+                attribution: '<a href="https://protomaps.com">Protomaps</a> © <a href="https://openstreetmap.org">OpenStreetMap</a>'
+            }
+        },
+        layers: [
+            {
+                id: "background",
+                type: "background",
+                paint: { "background-color": "#e0dfdf" }
+            },
+            {
+                id: "earth",
+                type: "fill",
+                source: "protomaps",
+                "source-layer": "earth",
+                paint: { "fill-color": "#e0dfdf" }
+            },
+            {
+                id: "water",
+                type: "fill",
+                source: "protomaps",
+                "source-layer": "water",
+                paint: { "fill-color": "#a2c1df" }
+            },
+            {
+                id: "roads",
+                type: "line",
+                source: "protomaps",
+                "source-layer": "roads",
+                paint: { "line-color": "#ffffff", "line-width": 2 }
+            },
+            {
+                id: "buildings",
+                type: "fill",
+                source: "protomaps",
+                "source-layer": "buildings",
+                paint: { "fill-color": "#cccccc" }
+            }
+        ]
+    }
 }).addTo(map);
 
 var layers = {
